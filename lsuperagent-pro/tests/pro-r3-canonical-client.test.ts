@@ -29,9 +29,7 @@ describe('PRO-R3 canonical gateway client', () => {
   })
 
   it('fails closed without network when server configuration is absent', async () => {
-    const fetchImpl = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(),
-    )
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response())
 
     await expect(
       dispatchCanonicalChat(context, {
@@ -49,20 +47,19 @@ describe('PRO-R3 canonical gateway client', () => {
   })
 
   it('maps a valid canonical handshake to gateway_connected without execution', async () => {
-    const fetchImpl = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        new Response(
-          JSON.stringify({
-            requestId: context.requestId,
-            gateway: 'CONNECTED',
-            execution: 'NOT_CONNECTED',
-            code: 'UPSTREAM_UNAVAILABLE',
-          }),
-          {
-            status: 503,
-            headers: { 'content-type': 'application/json' },
-          },
-        ),
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(
+        JSON.stringify({
+          requestId: context.requestId,
+          gateway: 'CONNECTED',
+          execution: 'NOT_CONNECTED',
+          code: 'UPSTREAM_UNAVAILABLE',
+        }),
+        {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
     )
 
     await expect(
@@ -94,11 +91,9 @@ describe('PRO-R3 canonical gateway client', () => {
   })
 
   it('fails closed on network failure or malformed canonical response', async () => {
-    const throwingFetch = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
-        throw new Error('network unavailable')
-      },
-    )
+    const throwingFetch = vi.fn<typeof fetch>(async () => {
+      throw new Error('network unavailable')
+    })
 
     await expect(
       dispatchCanonicalChat(context, {
@@ -112,9 +107,8 @@ describe('PRO-R3 canonical gateway client', () => {
       requestId: context.requestId,
     })
 
-    const malformedFetch = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        new Response(JSON.stringify({ gateway: 'CONNECTED' }), { status: 503 }),
+    const malformedFetch = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ gateway: 'CONNECTED' }), { status: 503 }),
     )
 
     await expect(
