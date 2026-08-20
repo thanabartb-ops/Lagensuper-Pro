@@ -1,0 +1,89 @@
+name: LSUPERAGENT PRO R3 Prelive Verify
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lsuperagent-pro/**'
+      - '.github/workflows/pro-r3-prelive-verify.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: PRO-R3 pre-live gateway verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: lsuperagent-pro
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify environment contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .env.example
+          mapfile -t vars < <(grep -vE '^\s*(#|$)' .env.example | cut -d= -f1)
+          expected=(
+            NEXT_PUBLIC_SUPABASE_URL
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+            NEXT_PUBLIC_APP_ENV
+          )
+          test "${#vars[@]}" -eq "${#expected[@]}"
+          for i in "${!expected[@]}"; do
+            test "${vars[$i]}" = "${expected[$i]}"
+          done
+
+      - name: Verify PRELIVE route boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f app/api/health/route.ts
+          test -f app/api/chat/route.ts
+          prohibited=(
+            app/api/execute/route.ts
+            app/api/memory/route.ts
+            app/api/memory/candidate/route.ts
+            app/api/tools/route.ts
+            app/api/audit/route.ts
+          )
+          for route in "${prohibited[@]}"; do
+            test ! -e "$route"
+          done
+
+      - name: Verify offline gateway adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -RIE 'fetch\(|process\.env|@supabase/|openai|anthropic|gemini' lib/gateway/server-dispatch.ts app/api/chat/route.ts
+
+      - name: Vitest
+        run: pnpm vitest run
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: TypeScript
+        run: pnpm exec tsc --noEmit
+
+      - name: Production build
+        run: pnpm build
