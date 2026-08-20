@@ -54,13 +54,13 @@ jobs:
           done
           test "$(grep '^NEXT_PUBLIC_APP_ENV=' .env.example)" = 'NEXT_PUBLIC_APP_ENV=preview'
 
-      - name: Verify prohibited server routes are absent
+      - name: Verify approved server route boundary
         shell: bash
         run: |
           set -euo pipefail
           test -f app/api/health/route.ts
+          test -f app/api/chat/route.ts
           prohibited=(
-            app/api/chat/route.ts
             app/api/execute/route.ts
             app/api/memory/route.ts
             app/api/memory/candidate/route.ts
