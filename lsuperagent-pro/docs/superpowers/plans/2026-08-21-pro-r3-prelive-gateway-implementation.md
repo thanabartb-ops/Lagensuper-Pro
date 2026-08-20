@@ -34,16 +34,14 @@
 
 **Interfaces:**
 - Produces: `parseChatRequest(input: unknown): ChatRequest`
-- Produces: `buildGatewayContext(request: ChatRequest): GatewayContext`
+- Produces: `buildGatewayContext(request: ChatRequest, requestId?: string): GatewayContext`
 - Produces: `ChatRequest`, `GatewayContext`, `PublicGatewayErrorCode`, `GatewayDispatchResult`
 
 - [ ] **Step 1: Write failing context/validation tests**
 
-Cover a valid message/workspace, empty message, whitespace-only message, message over 12000 chars, non-string message, invalid workspace type, and unknown fields. Assert `buildGatewayContext()` generates a non-empty request ID, `userId === null`, `action === 'chat'`, and ISO `receivedAt`.
+Cover a valid message/workspace, empty message, whitespace-only message, message over 12000 chars, non-string message, invalid workspace type, and unknown fields. Assert `buildGatewayContext()` generates a non-empty request ID, preserves an explicitly supplied request ID, sets `userId === null`, `action === 'chat'`, and emits ISO `receivedAt`.
 
 - [ ] **Step 2: Run the focused test and verify RED**
-
-Run:
 
 ```bash
 pnpm vitest run tests/pro-r3-context.test.ts
@@ -53,11 +51,11 @@ Expected: FAIL because `chat-request.ts` and `context.ts` do not exist.
 
 - [ ] **Step 3: Implement strict validation**
 
-Implement `ChatRequest` as `{ message: string; workspaceId?: string | null }`. Reject non-object/array/null bodies, keys outside `message` and `workspaceId`, invalid message/workspace types, and trimmed message lengths outside 1..12000. Return the trimmed message.
+Implement `ChatRequest` as `{ message: string; workspaceId?: string | null }`. Reject non-object/array/null bodies, keys outside `message` and `workspaceId`, invalid message/workspace types, and trimmed message lengths outside 1..12000. Return the trimmed message and normalized workspace value.
 
 - [ ] **Step 4: Implement normalized context**
 
-Use `crypto.randomUUID()` for `requestId`, `new Date().toISOString()` for `receivedAt`, set `userId: null`, `action: 'chat'`, and place only `{ message }` in `input`.
+Use the supplied request ID when present, otherwise `crypto.randomUUID()`. Use `new Date().toISOString()` for `receivedAt`, set `userId: null`, `action: 'chat'`, and place only `{ message }` in `input`.
 
 - [ ] **Step 5: Run focused tests GREEN**
 
@@ -83,6 +81,7 @@ git commit -m "feat(pro-r3): add validated gateway context"
 - Create: `app/api/chat/route.ts`
 - Test: `tests/pro-r3-chat-route.test.ts`
 - Modify: `tests/pro-r2-routes.test.ts`
+- Modify: `.github/workflows/pro-r2-verify.yml`
 
 **Interfaces:**
 - Consumes: `GatewayContext`, `GatewayDispatchResult`, `parseChatRequest`, `buildGatewayContext`
@@ -93,7 +92,7 @@ git commit -m "feat(pro-r3): add validated gateway context"
 
 Assert valid input returns HTTP 503 with `{ code: 'UPSTREAM_UNAVAILABLE', requestId }`; malformed JSON and invalid contracts return HTTP 400 with `{ code: 'INVALID_REQUEST', requestId }`; response bodies do not contain stack traces, provider keys, tokens, or authorization headers. Assert adapter always returns `not_connected`.
 
-Update the PRO-R2 route boundary test so `/api/chat` is now the single newly approved PRELIVE route while `/api/execute`, `/api/memory`, `/api/memory/candidate`, `/api/tools`, and `/api/audit` remain absent.
+Update the PRO-R2 route test only after RED is observed so `/api/chat` becomes the single newly approved PRELIVE route while `/api/execute`, `/api/memory`, `/api/memory/candidate`, `/api/tools`, and `/api/audit` remain absent.
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
@@ -109,20 +108,25 @@ Expected: FAIL because `/api/chat` and `server-dispatch.ts` do not exist.
 
 - [ ] **Step 4: Implement `POST /api/chat`**
 
-Create a request ID before parsing so malformed JSON still receives one. Parse JSON safely. Validate with `parseChatRequest`. Build context with the request ID preserved. Invalid requests return `Response.json({ code: 'INVALID_REQUEST', requestId }, { status: 400 })`. Valid PRELIVE requests dispatch and return `Response.json({ code: 'UPSTREAM_UNAVAILABLE', requestId }, { status: 503 })`.
+Create `requestId = crypto.randomUUID()` before parsing so malformed JSON receives a correlation ID. Parse JSON safely. Validate with `parseChatRequest`. Build context with `buildGatewayContext(parsed, requestId)`. Invalid requests return `Response.json({ code: 'INVALID_REQUEST', requestId }, { status: 400 })`. Valid PRELIVE requests dispatch and return `Response.json({ code: 'UPSTREAM_UNAVAILABLE', requestId }, { status: 503 })`.
 
-- [ ] **Step 5: Run focused tests GREEN**
+- [ ] **Step 5: Advance prior route boundary**
+
+Update `tests/pro-r2-routes.test.ts` and `.github/workflows/pro-r2-verify.yml` so both require `/api/health` and `/api/chat`, while execute/memory/memory-candidate/tools/audit routes remain absent.
+
+- [ ] **Step 6: Run focused/full tests GREEN**
 
 ```bash
 pnpm vitest run tests/pro-r3-chat-route.test.ts tests/pro-r2-routes.test.ts
+pnpm vitest run
 ```
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 2**
+- [ ] **Step 7: Commit Task 2**
 
 ```bash
-git add lsuperagent-pro/app/api/chat lsuperagent-pro/lib/gateway/server-dispatch.ts lsuperagent-pro/tests
+git add lsuperagent-pro/app/api/chat lsuperagent-pro/lib/gateway/server-dispatch.ts lsuperagent-pro/tests .github/workflows/pro-r2-verify.yml
 git commit -m "feat(pro-r3): add fail-closed chat boundary"
 ```
 
@@ -139,7 +143,7 @@ git commit -m "feat(pro-r3): add fail-closed chat boundary"
 
 - [ ] **Step 1: Write security-boundary tests**
 
-Read `lib/gateway/server-dispatch.ts` and `app/api/chat/route.ts` as text and assert they do not contain `fetch(`, provider SDK imports, Supabase mutation methods, live gateway URL variables, privileged secret-name literals, or authorization-header forwarding logic.
+Read `lib/gateway/server-dispatch.ts` and `app/api/chat/route.ts` as text and assert they do not contain network dispatch (`fetch(`), provider SDK imports, Supabase mutation methods, live gateway URL variables, privileged secret-name literals, or authorization-header forwarding logic.
 
 - [ ] **Step 2: Run security test**
 
@@ -163,7 +167,7 @@ pnpm build
 
 Add shell checks proving `app/api/chat/route.ts` and `app/api/health/route.ts` exist while execute/memory/tools/audit routes remain absent. Add a secret-name scan over `app components lib tests .env.example`.
 
-- [ ] **Step 4: Run full local/runner verification**
+- [ ] **Step 4: Run full runner verification**
 
 ```bash
 pnpm vitest run
