@@ -83,4 +83,22 @@ describe('PRO R3 live gateway dispatch', () => {
       requestId: context.requestId,
     })
   })
+
+  it('rejects non-HTTPS gateway URLs without making a network request', async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+
+    await expect(
+      dispatchTrustedGateway(context, {
+        gatewayUrl: 'http://gateway-preview.example.test',
+        clientId,
+        secret,
+        fetchImpl,
+      }),
+    ).resolves.toEqual({
+      status: 'not_connected',
+      requestId: context.requestId,
+    })
+
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
 })
