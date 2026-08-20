@@ -28,6 +28,18 @@ export async function POST(request: Request): Promise<Response> {
       )
     }
 
+    if (result.status === 'gateway_connected') {
+      return Response.json(
+        {
+          code: 'UPSTREAM_UNAVAILABLE',
+          requestId: result.requestId,
+          gateway: 'CONNECTED',
+          execution: 'NOT_CONNECTED',
+        },
+        { status: 503 },
+      )
+    }
+
     return Response.json(
       { code: 'INTERNAL_ERROR', requestId },
       { status: 500 },
