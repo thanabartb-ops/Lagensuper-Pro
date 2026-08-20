@@ -37,12 +37,12 @@ describe('PRO-R2 route and authority boundary', () => {
 
   it('does not introduce privileged secret names in app or lib source', () => {
     const forbidden = [
-      'SUPABASE_SERVICE_ROLE_KEY',
-      'OPENAI_API_KEY',
-      'ANTHROPIC_API_KEY',
-      'GEMINI_API_KEY',
-      'GITHUB_TOKEN',
-      'VERCEL_TOKEN',
+      'SUPABASE_' + 'SERVICE_ROLE_KEY',
+      'OPENAI_' + 'API_KEY',
+      'ANTHROPIC_' + 'API_KEY',
+      'GEMINI_' + 'API_KEY',
+      'GITHUB_' + 'TOKEN',
+      'VERCEL_' + 'TOKEN',
     ]
 
     const sources = [
