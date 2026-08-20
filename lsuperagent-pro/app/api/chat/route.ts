@@ -34,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
           code: 'UPSTREAM_UNAVAILABLE',
           requestId: result.requestId,
           gateway: 'CONNECTED',
-          execution: 'NOT_CONNECTED',
+          backend: 'NOT_CONNECTED',
         },
         { status: 503 },
       )
