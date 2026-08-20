@@ -29,6 +29,19 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if (result.status === 'gateway_connected') {
+      if (result.backend === 'connected') {
+        return Response.json(
+          {
+            code: 'UPSTREAM_UNAVAILABLE',
+            requestId: result.requestId,
+            gateway: 'CONNECTED',
+            backend: 'CONNECTED',
+            provider: 'DISABLED',
+          },
+          { status: 503 },
+        )
+      }
+
       return Response.json(
         {
           code: 'UPSTREAM_UNAVAILABLE',
