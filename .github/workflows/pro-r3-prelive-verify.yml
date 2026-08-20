@@ -74,12 +74,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f lib/gateway/canonical-client.ts
-          grep -q 'process\.env' lib/gateway/canonical-client.ts
-          grep -q 'fetch' lib/gateway/canonical-client.ts
-          ! grep -RIE 'fetch\(|process\.env' lib/gateway/server-dispatch.ts app/api/chat/route.ts
-          ! grep -RIE '(@supabase/|openai|anthropic|gemini|NEXT_PUBLIC_LSUPERAGENT_GATEWAY)' \
-            lib/gateway/canonical-client.ts lib/gateway/server-dispatch.ts app/api/chat/route.ts
+          test -f lib/gateway/r3-signing.ts
+          test -f lib/gateway/server-dispatch.ts
+          grep -q 'process\.env' lib/gateway/server-dispatch.ts
+          grep -q 'fetch' lib/gateway/server-dispatch.ts
+          ! grep -RIE 'fetch\(|process\.env' lib/gateway/r3-signing.ts app/api/chat/route.ts
+          ! grep -RIE '(@supabase/|openai|anthropic|gemini|NEXT_PUBLIC_LSUPERAGENT_GATEWAY|LSUPERAGENT_GATEWAY_SHARED_SECRET)' \
+            lib/gateway/r3-signing.ts lib/gateway/server-dispatch.ts app/api/chat/route.ts
 
       - name: Vitest
         run: pnpm vitest run
