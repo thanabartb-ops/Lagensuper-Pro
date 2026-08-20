@@ -52,7 +52,7 @@ export async function dispatchTrustedGateway(
   let endpoint: string
   try {
     const base = new URL(gatewayUrl)
-    if (base.protocol !== 'https:' && base.protocol !== 'http:') {
+    if (base.protocol !== 'https:') {
       return { status: 'not_connected', requestId: context.requestId }
     }
     endpoint = new URL('/api/chat', base).toString()
