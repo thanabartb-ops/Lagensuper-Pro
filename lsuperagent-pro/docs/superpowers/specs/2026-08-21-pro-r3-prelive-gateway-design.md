@@ -46,7 +46,7 @@ Implement:
 - request ID generation;
 - fail-closed gateway adapter;
 - unit/contract tests;
-- CI checks proving no live endpoint, privileged credential, provider call, Supabase mutation, or extra server route is introduced.
+- CI checks proving no live endpoint, privileged credential, provider call, Supabase mutation, or unapproved server route is introduced.
 
 Do not implement:
 
@@ -91,7 +91,14 @@ export type GatewayContext = {
   input: { message: string }
   receivedAt: string
 }
+
+export function buildGatewayContext(
+  request: ChatRequest,
+  requestId?: string,
+): GatewayContext
 ```
+
+If `requestId` is omitted, `buildGatewayContext()` generates one with `crypto.randomUUID()`. `/api/chat` creates a request ID before JSON parsing and passes the same ID into `buildGatewayContext()` for valid requests so malformed and valid responses follow one correlation model.
 
 `userId` remains `null` in PRELIVE. PRO-R4/live-auth work must replace this with verified server-side session identity; browser input never populates it.
 
@@ -146,12 +153,13 @@ Forbidden in PRELIVE source/config:
 
 Required tests:
 
-1. valid chat request is normalized into `GatewayContext` with generated `requestId`, `userId: null`, `action: 'chat'`, and normalized workspace ID;
+1. valid chat request is normalized into `GatewayContext` with generated/preserved `requestId`, `userId: null`, `action: 'chat'`, and normalized workspace ID;
 2. empty, whitespace-only, too-long, malformed, wrong-type, and unknown-field requests are rejected;
 3. `/api/chat` returns HTTP 503 / `UPSTREAM_UNAVAILABLE` for a valid request while adapter is not connected;
 4. response includes request ID and no internal stack/provider/secret material;
 5. gateway adapter contains no `fetch`, provider SDK, Supabase mutation, or live endpoint configuration;
-6. `/api/health` remains unchanged and existing PRO-R1/PRO-R2 tests continue to pass.
+6. `/api/health` remains unchanged and existing PRO-R1/PRO-R2 tests continue to pass;
+7. the existing PRO-R2 CI boundary is advanced so `/api/chat` becomes approved in R3 while `/api/execute`, `/api/memory`, `/api/memory/candidate`, `/api/tools`, and `/api/audit` remain forbidden.
 
 Verification sequence:
 
