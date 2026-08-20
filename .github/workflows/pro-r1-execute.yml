@@ -1,0 +1,261 @@
+name: LSUPERAGENT PRO R1 Execute
+
+on:
+  push:
+    branches:
+      - agent/pro-r1-shell-v1
+    paths:
+      - .github/workflows/pro-r1-execute.yml
+
+permissions:
+  contents: write
+
+jobs:
+  pro-r1:
+    name: PRO-R1 shell executor
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_DIR: lsuperagent-pro
+      EVIDENCE_DIR: /tmp/pro-r1-evidence
+
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/pro-r1-shell-v1
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Scaffold Next.js application with pnpm
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          test ! -e "$APP_DIR"
+          pnpm create next-app@latest "$APP_DIR" \
+            --typescript \
+            --tailwind \
+            --eslint \
+            --app \
+            --no-src-dir \
+            --import-alias='@/*' \
+            --use-pnpm \
+            --disable-git \
+            --yes
+
+      - name: Install PRO-R1 dependencies
+        shell: bash
+        working-directory: lsuperagent-pro
+        run: |
+          set -euxo pipefail
+          pnpm add @supabase/supabase-js lucide-react clsx tailwind-merge
+          pnpm add -D vitest @vitejs/plugin-react @testing-library/react @testing-library/dom @testing-library/jest-dom jsdom
+
+      - name: Write tests before implementation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$APP_DIR/tests"
+
+          cat > "$APP_DIR/vitest.config.ts" <<'EOF'
+          import { defineConfig } from 'vitest/config'
+          import react from '@vitejs/plugin-react'
+
+          export default defineConfig({
+            plugins: [react()],
+            test: {
+              environment: 'jsdom',
+              setupFiles: ['./tests/setup.ts'],
+            },
+          })
+          EOF
+
+          cat > "$APP_DIR/tests/setup.ts" <<'EOF'
+          import '@testing-library/jest-dom/vitest'
+          EOF
+
+          cat > "$APP_DIR/tests/pro-r1.test.tsx" <<'EOF'
+          import { cleanup, render, screen } from '@testing-library/react'
+          import { afterEach, describe, expect, it } from 'vitest'
+          import { existsSync, readFileSync } from 'node:fs'
+          import { resolve } from 'node:path'
+          import Home from '../app/page'
+
+          afterEach(() => cleanup())
+
+          describe('LSUPERAGENT PRO R1 contract', () => {
+            it('renders alternate-client identity with disconnected status', () => {
+              render(<Home />)
+              expect(screen.getByRole('heading', { name: /LSUPERAGENT PRO/i })).toBeInTheDocument()
+              expect(screen.getByText('Alternate Client')).toBeInTheDocument()
+              expect(screen.getByText('NOT_CONNECTED')).toBeInTheDocument()
+            })
+
+            it('contains only the approved browser-safe environment contract', () => {
+              const envPath = resolve(process.cwd(), '.env.example')
+              expect(existsSync(envPath)).toBe(true)
+              const content = existsSync(envPath) ? readFileSync(envPath, 'utf8') : ''
+              const names = content
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter((line) => line && !line.startsWith('#'))
+                .map((line) => line.split('=')[0])
+              expect(names).toEqual([
+                'NEXT_PUBLIC_SUPABASE_URL',
+                'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+                'NEXT_PUBLIC_APP_ENV',
+              ])
+            })
+
+            it('defines an honest health contract without claiming gateway or backend connectivity', () => {
+              const routePath = resolve(process.cwd(), 'app/api/health/route.ts')
+              expect(existsSync(routePath)).toBe(true)
+              const source = existsSync(routePath) ? readFileSync(routePath, 'utf8') : ''
+              expect(source).toContain("app: 'ok'")
+              expect(source).toContain("gateway: 'NOT_CONNECTED'")
+              expect(source).toContain("backend: 'NOT_CONNECTED'")
+            })
+          })
+          EOF
+
+      - name: Observe RED
+        shell: bash
+        working-directory: lsuperagent-pro
+        run: |
+          set -uo pipefail
+          set +e
+          pnpm vitest run tests/pro-r1.test.tsx 2>&1 | tee "$EVIDENCE_DIR/red.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          test "$status" -ne 0
+          grep -F 'LSUPERAGENT PRO' "$EVIDENCE_DIR/red.log" >/dev/null || grep -F '.env.example' "$EVIDENCE_DIR/red.log" >/dev/null || grep -F 'NOT_CONNECTED' "$EVIDENCE_DIR/red.log" >/dev/null
+          printf 'RED confirmed: PRO-R1 contract fails before implementation.\n' | tee "$EVIDENCE_DIR/red-summary.log"
+
+      - name: Implement minimum PRO-R1 shell and health contract
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$APP_DIR/app/api/health"
+
+          cat > "$APP_DIR/app/page.tsx" <<'EOF'
+          export default function Home() {
+            return (
+              <main className="min-h-screen bg-black text-white px-6 py-16 sm:px-10">
+                <section className="mx-auto flex w-full max-w-5xl flex-col gap-8">
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-400">
+                      Alternate Client
+                    </p>
+                    <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">
+                      LSUPERAGENT PRO
+                    </h1>
+                    <p className="max-w-2xl text-zinc-400">
+                      Thin client for the existing trusted LSUPERAGENT gateway. No parallel core, memory, audit, or runtime authority is created here.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
+                    <p className="text-sm text-zinc-500">Gateway / canonical backend</p>
+                    <p className="mt-2 font-mono text-sm tracking-wider">NOT_CONNECTED</p>
+                  </div>
+                </section>
+              </main>
+            )
+          }
+          EOF
+
+          cat > "$APP_DIR/app/api/health/route.ts" <<'EOF'
+          import { randomUUID } from 'node:crypto'
+
+          export async function GET() {
+            return Response.json({
+              app: 'ok',
+              client: 'LSUPERAGENT_PRO',
+              role: 'ALTERNATE_CLIENT',
+              gateway: 'NOT_CONNECTED',
+              backend: 'NOT_CONNECTED',
+              requestId: randomUUID(),
+              timestamp: new Date().toISOString(),
+            })
+          }
+          EOF
+
+          cat > "$APP_DIR/.env.example" <<'EOF'
+          NEXT_PUBLIC_SUPABASE_URL=
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+          NEXT_PUBLIC_APP_ENV=preview
+          EOF
+
+          if ! grep -qxF '!.env.example' "$APP_DIR/.gitignore"; then
+            printf '\n!.env.example\n' >> "$APP_DIR/.gitignore"
+          fi
+
+      - name: Verify GREEN with Vitest
+        shell: bash
+        working-directory: lsuperagent-pro
+        run: set -o pipefail; pnpm vitest run 2>&1 | tee "$EVIDENCE_DIR/vitest.log"
+
+      - name: Verify lint
+        shell: bash
+        working-directory: lsuperagent-pro
+        run: set -o pipefail; pnpm lint 2>&1 | tee "$EVIDENCE_DIR/lint.log"
+
+      - name: Verify TypeScript
+        shell: bash
+        working-directory: lsuperagent-pro
+        run: set -o pipefail; pnpm exec tsc --noEmit 2>&1 | tee "$EVIDENCE_DIR/typecheck.log"
+
+      - name: Verify production build
+        shell: bash
+        working-directory: lsuperagent-pro
+        run: set -o pipefail; pnpm build 2>&1 | tee "$EVIDENCE_DIR/build.log"
+
+      - name: Security and scope review
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -f "$APP_DIR/.env.example"
+          test -f "$APP_DIR/app/api/health/route.ts"
+          test -f "$APP_DIR/tests/pro-r1.test.tsx"
+          if grep -RIE '(SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GITHUB_TOKEN|VERCEL_TOKEN|sk-[A-Za-z0-9_-]{12,})' \
+            "$APP_DIR/app" "$APP_DIR/tests" "$APP_DIR/.env.example"; then
+            echo 'Forbidden privileged secret name or token-like value detected.' >&2
+            exit 1
+          fi
+          git diff --check
+          printf 'Scope/security review passed: nested PRO client only; no privileged keys; no deploy.\n' | tee "$EVIDENCE_DIR/review.log"
+
+      - name: Commit only after fresh verification
+        shell: bash
+        run: |
+          set -euxo pipefail
+          unexpected="$(git status --porcelain | awk '{print $2}' | grep -v '^lsuperagent-pro/' || true)"
+          if [ -n "$unexpected" ]; then
+            echo 'Unexpected path changed outside lsuperagent-pro:' >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
+          git add "$APP_DIR"
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(pro-r1): execute PRO-R1 shell implementation and contract tests'
+          git push origin HEAD:agent/pro-r1-shell-v1
+          git rev-parse HEAD | tee "$EVIDENCE_DIR/commit-sha.log"
+
+      - name: Upload PRO-R1 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: lsuperagent-pro-r1-${{ github.run_id }}
+          path: /tmp/pro-r1-evidence
+          retention-days: 14
