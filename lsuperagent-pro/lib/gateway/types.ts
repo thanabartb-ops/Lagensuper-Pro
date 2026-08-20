@@ -59,6 +59,11 @@ export type PublicGatewayErrorCode =
 
 export type GatewayDispatchResult =
   | { status: 'not_connected'; requestId: string }
+  | {
+      status: 'gateway_connected'
+      requestId: string
+      execution: 'not_connected'
+    }
   | { status: 'verified'; requestId: string; data: unknown }
   | { status: 'blocked'; requestId: string; code: PublicGatewayErrorCode }
   | { status: 'failed'; requestId: string; code: PublicGatewayErrorCode }
