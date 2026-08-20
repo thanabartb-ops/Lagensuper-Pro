@@ -19,8 +19,9 @@ function canonicalFetch() {
     return new Response(
       JSON.stringify({
         requestId,
+        status: 'failed',
         gateway: 'CONNECTED',
-        execution: 'NOT_CONNECTED',
+        backend: 'NOT_CONNECTED',
         code: 'UPSTREAM_UNAVAILABLE',
       }),
       { status: 503, headers: { 'content-type': 'application/json' } },
@@ -30,7 +31,8 @@ function canonicalFetch() {
 
 function enableCanonicalGateway() {
   vi.stubEnv('LSUPERAGENT_GATEWAY_URL', 'https://gateway.example.test')
-  vi.stubEnv('LSUPERAGENT_GATEWAY_SHARED_SECRET', 'unit-test-secret-only')
+  vi.stubEnv('LSUPERAGENT_GATEWAY_CLIENT_ID', 'lsuperagent-pro')
+  vi.stubEnv('LSUPERAGENT_GATEWAY_HMAC_SECRET', 'unit-test-secret-only')
   vi.stubGlobal('fetch', canonicalFetch())
 }
 
@@ -104,7 +106,7 @@ describe('PRO-R3 fail-closed chat route', () => {
     })
   })
 
-  it('delegates to the canonical gateway and preserves execution as not connected', async () => {
+  it('delegates to the canonical gateway and preserves backend as not connected', async () => {
     enableCanonicalGateway()
 
     const context: GatewayContext = {
@@ -119,11 +121,11 @@ describe('PRO-R3 fail-closed chat route', () => {
     await expect(dispatchTrustedGateway(context)).resolves.toEqual({
       status: 'gateway_connected',
       requestId: context.requestId,
-      execution: 'not_connected',
+      backend: 'not_connected',
     })
   })
 
-  it('reports canonical gateway connectivity without claiming model execution', async () => {
+  it('reports canonical gateway connectivity without claiming backend execution', async () => {
     enableCanonicalGateway()
 
     const response = await POST(
@@ -135,7 +137,7 @@ describe('PRO-R3 fail-closed chat route', () => {
     expect(body).toMatchObject({
       code: 'UPSTREAM_UNAVAILABLE',
       gateway: 'CONNECTED',
-      execution: 'NOT_CONNECTED',
+      backend: 'NOT_CONNECTED',
     })
     expect(typeof body.requestId).toBe('string')
   })
