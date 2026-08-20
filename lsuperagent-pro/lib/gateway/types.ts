@@ -64,6 +64,12 @@ export type GatewayDispatchResult =
       requestId: string
       backend: 'not_connected'
     }
+  | {
+      status: 'gateway_connected'
+      requestId: string
+      backend: 'connected'
+      provider: 'disabled'
+    }
   | { status: 'verified'; requestId: string; data: unknown }
   | { status: 'blocked'; requestId: string; code: PublicGatewayErrorCode }
   | { status: 'failed'; requestId: string; code: PublicGatewayErrorCode }

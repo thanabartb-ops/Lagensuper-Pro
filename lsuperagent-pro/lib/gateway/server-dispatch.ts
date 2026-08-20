@@ -11,28 +11,36 @@ type DispatchOptions = {
   timeoutMs?: number
 }
 
-function isCanonicalHandshake(
+type CanonicalHandshake =
+  | { backend: 'not_connected' }
+  | { backend: 'connected'; provider: 'disabled' }
+
+function parseCanonicalHandshake(
   input: unknown,
   requestId: string,
-): input is {
-  requestId: string
-  status: 'failed'
-  code: 'UPSTREAM_UNAVAILABLE'
-  gateway: 'CONNECTED'
-  backend: 'NOT_CONNECTED'
-} {
+): CanonicalHandshake | null {
   if (input === null || Array.isArray(input) || typeof input !== 'object') {
-    return false
+    return null
   }
 
   const record = input as Record<string, unknown>
-  return (
+  const common =
     record.requestId === requestId &&
     record.status === 'failed' &&
     record.code === 'UPSTREAM_UNAVAILABLE' &&
-    record.gateway === 'CONNECTED' &&
-    record.backend === 'NOT_CONNECTED'
-  )
+    record.gateway === 'CONNECTED'
+
+  if (!common) return null
+
+  if (record.backend === 'NOT_CONNECTED') {
+    return { backend: 'not_connected' }
+  }
+
+  if (record.backend === 'CONNECTED' && record.provider === 'DISABLED') {
+    return { backend: 'connected', provider: 'disabled' }
+  }
+
+  return null
 }
 
 export async function dispatchTrustedGateway(
@@ -91,8 +99,18 @@ export async function dispatchTrustedGateway(
       return { status: 'not_connected', requestId: context.requestId }
     }
 
-    if (!isCanonicalHandshake(payload, context.requestId)) {
+    const handshake = parseCanonicalHandshake(payload, context.requestId)
+    if (!handshake) {
       return { status: 'not_connected', requestId: context.requestId }
+    }
+
+    if (handshake.backend === 'connected') {
+      return {
+        status: 'gateway_connected',
+        requestId: context.requestId,
+        backend: 'connected',
+        provider: 'disabled',
+      }
     }
 
     return {
