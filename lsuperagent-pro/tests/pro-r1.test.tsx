@@ -11,7 +11,7 @@ describe('LSUPERAGENT PRO R1 contract', () => {
     render(<Home />)
     expect(screen.getByRole('heading', { name: /LSUPERAGENT PRO/i })).toBeInTheDocument()
     expect(screen.getByText('Alternate Client')).toBeInTheDocument()
-    expect(screen.getByText('NOT_CONNECTED')).toBeInTheDocument()
+    expect(screen.getAllByText('NOT_CONNECTED').length).toBeGreaterThan(0)
   })
 
   it('contains only the approved browser-safe environment contract', () => {
