@@ -1,4 +1,4 @@
-name: LSUPERAGENT PRO R3 Prelive Verify
+name: LSUPERAGENT PRO R3 Gateway Verify
 
 on:
   pull_request:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   verify:
-    name: PRO-R3 pre-live gateway verification
+    name: PRO-R3 canonical gateway source verification
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -53,7 +53,7 @@ jobs:
             test "${vars[$i]}" = "${expected[$i]}"
           done
 
-      - name: Verify PRELIVE route boundary
+      - name: Verify R3 route boundary
         shell: bash
         run: |
           set -euo pipefail
@@ -70,11 +70,16 @@ jobs:
             test ! -e "$route"
           done
 
-      - name: Verify offline gateway adapter
+      - name: Verify canonical gateway adapter boundary
         shell: bash
         run: |
           set -euo pipefail
-          ! grep -RIE 'fetch\(|process\.env|@supabase/|openai|anthropic|gemini' lib/gateway/server-dispatch.ts app/api/chat/route.ts
+          test -f lib/gateway/canonical-client.ts
+          grep -q 'process\.env' lib/gateway/canonical-client.ts
+          grep -q 'fetch' lib/gateway/canonical-client.ts
+          ! grep -RIE 'fetch\(|process\.env' lib/gateway/server-dispatch.ts app/api/chat/route.ts
+          ! grep -RIE '(@supabase/|openai|anthropic|gemini|NEXT_PUBLIC_LSUPERAGENT_GATEWAY)' \
+            lib/gateway/canonical-client.ts lib/gateway/server-dispatch.ts app/api/chat/route.ts
 
       - name: Vitest
         run: pnpm vitest run
