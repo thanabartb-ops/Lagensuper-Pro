@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { POST } from '../app/api/chat/route'
 import { dispatchTrustedGateway } from '../lib/gateway/server-dispatch'
 import type { GatewayContext } from '../lib/gateway/types'
@@ -11,8 +11,36 @@ function chatRequest(body: string) {
   })
 }
 
+function canonicalFetch() {
+  return vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const headers = init?.headers as Record<string, string>
+    const requestId = headers['x-lsuperagent-request-id']
+
+    return new Response(
+      JSON.stringify({
+        requestId,
+        gateway: 'CONNECTED',
+        execution: 'NOT_CONNECTED',
+        code: 'UPSTREAM_UNAVAILABLE',
+      }),
+      { status: 503, headers: { 'content-type': 'application/json' } },
+    )
+  })
+}
+
+function enableCanonicalGateway() {
+  vi.stubEnv('LSUPERAGENT_GATEWAY_URL', 'https://gateway.example.test')
+  vi.stubEnv('LSUPERAGENT_GATEWAY_SHARED_SECRET', 'unit-test-secret-only')
+  vi.stubGlobal('fetch', canonicalFetch())
+}
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+})
+
 describe('PRO-R3 fail-closed chat route', () => {
-  it('returns 503 UPSTREAM_UNAVAILABLE for a valid request', async () => {
+  it('returns 503 UPSTREAM_UNAVAILABLE for a valid request without gateway config', async () => {
     const response = await POST(
       chatRequest(JSON.stringify({ message: 'hello', workspaceId: 'w1' })),
     )
@@ -60,7 +88,7 @@ describe('PRO-R3 fail-closed chat route', () => {
     }
   })
 
-  it('keeps the server dispatcher fail-closed', async () => {
+  it('keeps the server dispatcher fail-closed when gateway config is absent', async () => {
     const context: GatewayContext = {
       requestId: 'request-1',
       userId: null,
@@ -74,5 +102,41 @@ describe('PRO-R3 fail-closed chat route', () => {
       status: 'not_connected',
       requestId: 'request-1',
     })
+  })
+
+  it('delegates to the canonical gateway and preserves execution as not connected', async () => {
+    enableCanonicalGateway()
+
+    const context: GatewayContext = {
+      requestId: '11111111-1111-4111-8111-111111111111',
+      userId: null,
+      workspaceId: 'w1',
+      action: 'chat',
+      input: { message: 'hello' },
+      receivedAt: new Date().toISOString(),
+    }
+
+    await expect(dispatchTrustedGateway(context)).resolves.toEqual({
+      status: 'gateway_connected',
+      requestId: context.requestId,
+      execution: 'not_connected',
+    })
+  })
+
+  it('reports canonical gateway connectivity without claiming model execution', async () => {
+    enableCanonicalGateway()
+
+    const response = await POST(
+      chatRequest(JSON.stringify({ message: 'hello', workspaceId: 'w1' })),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body).toMatchObject({
+      code: 'UPSTREAM_UNAVAILABLE',
+      gateway: 'CONNECTED',
+      execution: 'NOT_CONNECTED',
+    })
+    expect(typeof body.requestId).toBe('string')
   })
 })
