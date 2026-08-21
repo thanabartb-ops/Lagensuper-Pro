@@ -130,6 +130,11 @@ export async function dispatchTrustedGateway(
   const headers = new Headers(signed.headers)
   headers.set('authorization', `Bearer ${userAuthToken}`)
 
+  const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim()
+  if (protectionBypass) {
+    headers.set('x-vercel-protection-bypass', protectionBypass)
+  }
+
   const controller = new AbortController()
   const timeout = setTimeout(
     () => controller.abort(),
