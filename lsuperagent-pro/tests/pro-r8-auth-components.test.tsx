@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LoginForm } from '../components/auth/LoginForm'
 import { AuthenticatedCommandForm } from '../components/chat/AuthenticatedCommandForm'
+
+afterEach(() => cleanup())
 
 describe('PRO R8 login form', () => {
   it('signs in the existing account without exposing session material', async () => {
