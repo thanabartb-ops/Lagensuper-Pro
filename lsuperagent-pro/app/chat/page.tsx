@@ -1,4 +1,5 @@
 import { AuthenticatedCommandForm } from '@/components/chat/AuthenticatedCommandForm'
+import { UserDisplayName } from '@/components/auth/UserDisplayName'
 
 export default function ChatPage() {
   return (
@@ -7,7 +8,9 @@ export default function ChatPage() {
         <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
           LSUPERAGENT PRO
         </p>
-        <h1 className="text-3xl font-semibold tracking-tight">Chat</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Chat with <UserDisplayName fallback="your account" />
+        </h1>
         <p className="text-sm leading-6 text-zinc-400">
           Ask, analyze, research, or run a command from one place.
         </p>
