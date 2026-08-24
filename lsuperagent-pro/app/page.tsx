@@ -31,6 +31,7 @@ export default function Home() {
       <div className="mt-9">
         <h1 className="text-[34px] font-semibold leading-[1.08] tracking-[-0.035em] text-white sm:text-[38px]">
           Ready when you are,
+          {' '}
           <span className="mt-1 block text-violet-400">Bank.</span>
         </h1>
         <p className="mt-3 text-sm leading-6 text-zinc-500">Start with a message or choose a focused mode.</p>
