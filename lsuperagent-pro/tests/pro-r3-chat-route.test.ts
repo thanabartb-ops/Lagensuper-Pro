@@ -3,18 +3,25 @@ import { POST } from '../app/api/chat/route'
 import { dispatchTrustedGateway } from '../lib/gateway/server-dispatch'
 import type { GatewayContext } from '../lib/gateway/types'
 
+const userAuthToken = 'owner-jwt-test-only'
+
 function chatRequest(body: string) {
   return new Request('http://localhost/api/chat', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${userAuthToken}`,
+    },
     body,
   })
 }
 
 function canonicalFetch() {
   return vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-    const headers = init?.headers as Record<string, string>
-    const requestId = headers['x-lsuperagent-request-id']
+    const headers = new Headers(init?.headers)
+    const requestId = headers.get('x-lsuperagent-request-id')
+    expect(headers.get('authorization')).toBe(`Bearer ${userAuthToken}`)
+    expect(String(init?.body)).not.toContain(userAuthToken)
 
     return new Response(
       JSON.stringify({
@@ -41,8 +48,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('PRO-R3 fail-closed chat route', () => {
-  it('returns 503 UPSTREAM_UNAVAILABLE for a valid request without gateway config', async () => {
+describe('PRO-R3 fail-closed chat route compatibility', () => {
+  it('returns 503 UPSTREAM_UNAVAILABLE for an authenticated valid request without gateway config', async () => {
     const response = await POST(
       chatRequest(JSON.stringify({ message: 'hello', workspaceId: 'w1' })),
     )
@@ -54,7 +61,7 @@ describe('PRO-R3 fail-closed chat route', () => {
     expect(body.requestId.length).toBeGreaterThan(0)
   })
 
-  it('returns 400 INVALID_REQUEST for malformed JSON', async () => {
+  it('returns 400 INVALID_REQUEST for authenticated malformed JSON', async () => {
     const response = await POST(chatRequest('{not-json'))
     const body = await response.json()
 
@@ -63,7 +70,7 @@ describe('PRO-R3 fail-closed chat route', () => {
     expect(typeof body.requestId).toBe('string')
   })
 
-  it('returns 400 for invalid or unknown request fields', async () => {
+  it('returns 400 for authenticated invalid or unknown request fields', async () => {
     const response = await POST(
       chatRequest(JSON.stringify({ message: 'hello', provider: 'browser-selected' })),
     )
@@ -83,6 +90,7 @@ describe('PRO-R3 fail-closed chat route', () => {
       'OPENAI_' + 'API_KEY',
       'ANTHROPIC_' + 'API_KEY',
       'GEMINI_' + 'API_KEY',
+      userAuthToken,
     ]
 
     for (const marker of forbidden) {
@@ -100,7 +108,9 @@ describe('PRO-R3 fail-closed chat route', () => {
       receivedAt: new Date().toISOString(),
     }
 
-    await expect(dispatchTrustedGateway(context)).resolves.toEqual({
+    await expect(
+      dispatchTrustedGateway(context, { userAuthToken }),
+    ).resolves.toEqual({
       status: 'not_connected',
       requestId: 'request-1',
     })
@@ -118,7 +128,9 @@ describe('PRO-R3 fail-closed chat route', () => {
       receivedAt: new Date().toISOString(),
     }
 
-    await expect(dispatchTrustedGateway(context)).resolves.toEqual({
+    await expect(
+      dispatchTrustedGateway(context, { userAuthToken }),
+    ).resolves.toEqual({
       status: 'gateway_connected',
       requestId: context.requestId,
       backend: 'not_connected',
