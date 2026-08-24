@@ -11,6 +11,7 @@ export type AuthClientLike = {
       email: string
       password: string
     }) => Promise<unknown>
+    getUser?: () => Promise<unknown>
     getSession?: () => Promise<unknown>
     signOut?: () => Promise<unknown>
   }
@@ -30,10 +31,71 @@ type ChatResult =
   | { status: 'unauthenticated' }
   | { status: 'failed'; code: string }
 
+export type DisplayNameResult =
+  | { status: 'authenticated'; displayName: string }
+  | { status: 'unauthenticated' }
+
 let browserClient: AuthClientLike | null = null
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && !Array.isArray(value) && typeof value === 'object'
+}
+
+function normalizeDisplayName(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+
+  const normalized = value.trim().replace(/\s+/g, ' ').slice(0, 80)
+  return normalized || null
+}
+
+export function resolveUserDisplayName(user: unknown): string | null {
+  if (!isRecord(user)) return null
+
+  const metadata = isRecord(user.user_metadata) ? user.user_metadata : {}
+  const metadataKeys = [
+    'display_name',
+    'full_name',
+    'name',
+    'preferred_username',
+    'user_name',
+    'nickname',
+    'given_name',
+  ] as const
+
+  for (const key of metadataKeys) {
+    const displayName = normalizeDisplayName(metadata[key])
+    if (displayName) return displayName
+  }
+
+  const email = normalizeDisplayName(user.email)
+  if (email) return email.split('@')[0] || email
+
+  const phone = normalizeDisplayName(user.phone)
+  if (phone) return `User ${phone.slice(-4)}`
+
+  const id = normalizeDisplayName(user.id)
+  return id ? `User ${id.slice(0, 8)}` : null
+}
+
+export async function getAuthenticatedDisplayName(
+  options: Pick<BrowserAuthOptions, 'client'> = {},
+): Promise<DisplayNameResult> {
+  const client = options.client ?? getBrowserAuthClient()
+  if (!client?.auth.getUser) return { status: 'unauthenticated' }
+
+  try {
+    const result = await client.auth.getUser()
+    if (!isRecord(result) || !isRecord(result.data) || result.error) {
+      return { status: 'unauthenticated' }
+    }
+
+    const displayName = resolveUserDisplayName(result.data.user)
+    return displayName
+      ? { status: 'authenticated', displayName }
+      : { status: 'unauthenticated' }
+  } catch {
+    return { status: 'unauthenticated' }
+  }
 }
 
 export function readBrowserAuthConfig(

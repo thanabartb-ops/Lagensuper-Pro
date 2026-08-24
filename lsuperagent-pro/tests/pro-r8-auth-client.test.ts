@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  getAuthenticatedDisplayName,
   readBrowserAuthConfig,
+  resolveUserDisplayName,
   sendAuthenticatedChat,
   signInWithPassword,
 } from '../lib/auth/browser-auth'
@@ -50,6 +52,42 @@ describe('PRO R8 owner sign-in', () => {
     })
     expect(result).toEqual({ status: 'authenticated', userId: 'owner-1' })
     expect(JSON.stringify(result)).not.toContain('owner-session-token')
+  })
+})
+
+describe('PRO R8 authenticated display name', () => {
+  it('uses the signed-in account display name instead of a hardcoded owner name', async () => {
+    const client = {
+      auth: {
+        getUser: vi.fn(async () => ({
+          data: {
+            user: {
+              id: 'user-1',
+              email: 'alice@example.test',
+              user_metadata: { full_name: 'Alice Example' },
+            },
+          },
+          error: null,
+        })),
+      },
+    }
+
+    await expect(getAuthenticatedDisplayName({ client })).resolves.toEqual({
+      status: 'authenticated',
+      displayName: 'Alice Example',
+    })
+  })
+
+  it('supports common provider metadata and falls back to the account email name', () => {
+    expect(resolveUserDisplayName({
+      user_metadata: { preferred_username: 'alice-github' },
+      email: 'ignored@example.test',
+    })).toBe('alice-github')
+
+    expect(resolveUserDisplayName({
+      user_metadata: {},
+      email: 'second.user@example.test',
+    })).toBe('second.user')
   })
 })
 

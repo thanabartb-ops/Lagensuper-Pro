@@ -15,7 +15,8 @@ describe('LSUPERAGENT V5 preview', () => {
 
     expect(screen.getByText('LS_BOTAGENT')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Sheetz, LS_BOTAGENT' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /Ready when you are, Bank/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Ready when you are, there/i })).toBeInTheDocument()
+    expect(screen.queryByText(/Bank\./i)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Research' })).toHaveAttribute('href', '/tools')
     expect(screen.getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/projects')
     expect(screen.getByRole('link', { name: 'Agent' })).toHaveAttribute('href', '/runtime')

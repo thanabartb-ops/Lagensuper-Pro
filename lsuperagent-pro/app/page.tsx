@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowUp, ChevronRight } from 'lucide-react'
+import { UserDisplayName } from '@/components/auth/UserDisplayName'
 
 const modes = [
   { label: 'Research', href: '/tools' },
@@ -32,7 +33,9 @@ export default function Home() {
         <h1 className="text-[34px] font-semibold leading-[1.08] tracking-[-0.035em] text-white sm:text-[38px]">
           Ready when you are,
           {' '}
-          <span className="mt-1 block text-violet-400">Bank.</span>
+          <span className="mt-1 block text-violet-400">
+            <UserDisplayName fallback="there" />.
+          </span>
         </h1>
         <p className="mt-3 text-sm leading-6 text-zinc-500">Start with a message or choose a focused mode.</p>
 

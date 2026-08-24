@@ -16,13 +16,14 @@
 
 - Open-navigation button: passed.
 - Right drawer, navigation links, and owner-login entry: passed.
+- Authenticated display name resolves from the current Supabase user; no hardcoded owner name remains: passed.
 - Message input accepts text: passed.
 - Message submission routes to the Chat screen: passed.
 - No application-origin console errors observed. Browser-extension and Vercel-auth messages were excluded.
 
 ## Build checks
 
-- Vitest: 19 files, 58 tests passed.
+- Vitest: 20 files, 62 tests passed.
 - Next.js production build and TypeScript checks: passed.
 - Vercel Preview deployment state: READY.
 - Existing production deployment was not changed.
