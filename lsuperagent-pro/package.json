@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "guard:secrets": "python3 .codex/hooks/lsuperagent_guard.py --scan-repo",
+    "verify": "pnpm guard:secrets && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
