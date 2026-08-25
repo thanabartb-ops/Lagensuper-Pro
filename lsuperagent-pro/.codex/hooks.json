@@ -1,0 +1,32 @@
+{
+  "description": "Load LSUPERAGENT operating context and block high-confidence secret leaks or destructive commands.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/lsuperagent-pro/.codex/hooks/lsuperagent_guard.py\" --context",
+            "statusMessage": "Loading LSUPERAGENT control context",
+            "additionalContextLimit": 2500,
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/lsuperagent-pro/.codex/hooks/lsuperagent_guard.py\"",
+            "statusMessage": "Checking LSUPERAGENT safety policy",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
