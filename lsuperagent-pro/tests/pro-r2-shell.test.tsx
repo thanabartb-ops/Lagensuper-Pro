@@ -2,32 +2,29 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { AppShell } from '../components/shell/AppShell'
 
-const expectedLinks = [
-  ['Chat', '/chat'],
-  ['Projects', '/projects'],
-  ['Memory', '/memory'],
-  ['Tools', '/tools'],
-  ['Runtime', '/runtime'],
-  ['Audit', '/audit'],
-  ['Settings', '/settings'],
+const expectedPrimaryActions = [
+  'หน้าหลัก',
+  'แชท',
+  'โปรเจกต์ & เครื่องมือ',
+  'ความจำ',
+  'ตั้งค่า',
 ] as const
 
 afterEach(() => cleanup())
 
-describe('PRO-R2 application shell', () => {
-  it('renders LSUPERAGENT PRO identity and all module destinations', () => {
+describe('V11 application shell', () => {
+  it('renders V11 identity, honest status, and primary navigation', () => {
     render(
       <AppShell>
         <p>Route content</p>
       </AppShell>,
     )
 
-    expect(screen.getByText('LSUPERAGENT PRO')).toBeInTheDocument()
+    expect(screen.getAllByText('LSUPERAGENT').length).toBeGreaterThan(0)
     expect(screen.getAllByText('NOT_CONNECTED').length).toBeGreaterThan(0)
 
-    for (const [label, href] of expectedLinks) {
-      const links = screen.getAllByRole('link', { name: label })
-      expect(links.some((link) => link.getAttribute('href') === href)).toBe(true)
+    for (const label of expectedPrimaryActions) {
+      expect(screen.getAllByRole('button', { name: label }).length).toBeGreaterThan(0)
     }
   })
 })

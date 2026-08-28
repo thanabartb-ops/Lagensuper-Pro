@@ -1,5 +1,5 @@
-import { ModuleStatusPage } from '@/components/modules/ModuleStatusPage'
+import { V11RouteView } from '@/components/v11/V11RouteView'
 
 export default function ChatPage() {
-  return <ModuleStatusPage title="Chat" description="Conversation shell only. No model request is sent in PRO-R2." />
+  return <V11RouteView route="smart_chat" />
 }

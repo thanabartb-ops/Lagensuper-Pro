@@ -1,5 +1,5 @@
-import { ModuleStatusPage } from '@/components/modules/ModuleStatusPage'
+import { V11RouteView } from '@/components/v11/V11RouteView'
 
 export default function AuditPage() {
-  return <ModuleStatusPage title="Audit" description="Canonical audit remains external to this client. No audit query or write wiring is enabled in PRO-R2." />
+  return <V11RouteView route="audit" />
 }

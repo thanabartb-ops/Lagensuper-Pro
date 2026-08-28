@@ -14,6 +14,7 @@ export function getGatewaySnapshot(): GatewaySnapshot {
 export async function requestTrustedGateway<T = unknown>(
   _request: TrustedGatewayRequest,
 ): Promise<TrustedGatewayResponse<T>> {
+  void _request
   return {
     status: 'not_connected',
     errorLayer: 'GATEWAY_ERROR',

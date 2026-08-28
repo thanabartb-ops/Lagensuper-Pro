@@ -1,6 +1,6 @@
 # LSUPERAGENT active control context
 
-- Product: LSUPERAGENT V5
+- Product: LSUPERAGENT V11 Public Beta
 - UI assistant name: LS_BOTAGENT
 - Code source of truth: GitHub
 - Runtime source: existing Supabase runtime; do not rebuild or duplicate it

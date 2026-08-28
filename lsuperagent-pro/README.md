@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LSUPERAGENT V11 Public Beta
 
-## Getting Started
+Next.js port of the approved AI Studio V11 interface. This package is a browser client for the existing trusted LSUPERAGENT gateway; it does not create a parallel runtime, memory store, audit authority, or provider integration.
 
-First, run the development server:
+## Current boundary
+
+- UI release: `V11 Public Beta`
+- Assistant: `LS_BOTAGENT`
+- Gateway: `NOT_CONNECTED`
+- Adapter: `MockRuntimeAdapter`
+- Runtime authority: existing Supabase-backed LSUPERAGENT runtime
+- Server routes added by this port: none
+
+## Routes
+
+| Surface | Next.js route | Runtime route |
+| --- | --- | --- |
+| Landing dashboard | `/` | — |
+| Smart Chat | `/chat` | `smart_chat` |
+| Deep Research | `/tools/deep-research` | `deep_research` |
+| Image Generation | `/tools/create-image` | `create_image` |
+| Agent Mode | `/tools/agent-mode` | `agent_mode` |
+| Memory | `/memory` | `memory` |
+| Projects & Tools | `/projects` | — |
+| Runtime | `/runtime` | — |
+| Audit | `/audit` | — |
+| Settings | `/settings` | — |
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+corepack pnpm install --frozen-lockfile
+corepack pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Verification
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+corepack pnpm guard:secrets
+corepack pnpm lint
+corepack pnpm typecheck
+corepack pnpm test
+corepack pnpm build
+```
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The release target remains mobile-first at `393 × 852`. Production deployment, database writes, migrations, key rotation, and runtime activation require separate explicit approval.
