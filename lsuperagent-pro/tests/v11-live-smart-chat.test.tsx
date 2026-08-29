@@ -1,42 +1,40 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { SmartChatView } from '../components/v11/components/chat/SmartChatView'
+import { V11Landing } from '../components/v11/V11Landing'
 import {
   GatewayRuntimeAdapter,
   defaultRuntimeAdapter,
 } from '../components/v11/services/runtimeAdapter'
-import type { RuntimeGatewayStatus } from '../components/v11/types'
+import { peekPendingPrompt } from '../components/v11/services/promptHandoff'
 
-const connectedStatus: RuntimeGatewayStatus = {
-  connected: true,
-  statusText: 'CONNECTED',
-  adapterName: 'GatewayRuntimeAdapter (V11 Public Beta)',
-  mode: 'LiveGateway',
-  apiLatencyMs: 12,
-  activeProvider: 'gemini',
-  supabaseAuth: 'READY',
-  version: 'V11.0.4-beta',
-  lastChecked: '2026-08-30T00:00:00.000Z',
-}
+const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }))
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: pushMock }),
+}))
 
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
 })
 
 afterEach(() => {
+  cleanup()
+  window.sessionStorage.clear()
+  pushMock.mockReset()
   vi.restoreAllMocks()
 })
 
-describe('V11 live Smart Chat adapter', () => {
-  it('turns a verified provider-neutral chat response into a live assistant result', async () => {
+describe('V11 live chat adapter', () => {
+  it('turns a verified provider-neutral chat response into a real assistant result', async () => {
     const adapter = new GatewayRuntimeAdapter(async () => ({
       status: 'verified' as const,
       requestId: 'req-1',
       data: {
-        provider: 'gemini',
-        model: 'gemini-runtime-test',
+        provider: 'claude',
+        model: 'runtime-test-model',
         output: { text: 'คำตอบจาก runtime จริง' },
       },
     }))
@@ -49,7 +47,7 @@ describe('V11 live Smart Chat adapter', () => {
       connected: true,
       statusText: 'CONNECTED',
       mode: 'LiveGateway',
-      activeProvider: 'gemini',
+      activeProvider: 'claude',
       supabaseAuth: 'READY',
     })
   })
@@ -69,27 +67,59 @@ describe('V11 live Smart Chat adapter', () => {
     })
   })
 
-  it('keeps non-chat MVP routes on the existing mock boundary', async () => {
+  it('keeps non-chat MVP routes outside this chat milestone', async () => {
     const sender = vi.fn()
     const adapter = new GatewayRuntimeAdapter(sender)
 
     const result = await adapter.executePrompt('research this', 'deep_research')
     expect(result.status).toBe('NOT_CONNECTED')
-    expect(result.message).toContain('[deep_research]')
     expect(sender).not.toHaveBeenCalled()
   })
 })
 
-describe('V11 Smart Chat status UI', () => {
-  it('renders adapter-reported live status instead of a hard-coded DEMO/OFFLINE claim', async () => {
-    vi.spyOn(defaultRuntimeAdapter, 'getStatus').mockResolvedValue(connectedStatus)
+describe('V11 two chat entrypoints', () => {
+  it('keeps the chat surface minimal with no fake connection labels', () => {
+    render(<SmartChatView />)
+
+    expect(screen.getByRole('heading', { name: 'LS_BOTAGENT' })).toBeInTheDocument()
+    expect(screen.queryByText(/Smart Chat/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/DEMO/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/LIVE/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/สถานะ Gateway:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/OFFLINE/i)).not.toBeInTheDocument()
+  })
+
+  it('sends a typed chat message through the runtime adapter and renders its reply', async () => {
+    const execute = vi
+      .spyOn(defaultRuntimeAdapter, 'executePrompt')
+      .mockResolvedValue({ status: 'SUCCESS', message: 'คำตอบจริงจาก runtime' })
 
     render(<SmartChatView />)
 
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'ช่วยผมทดสอบระบบ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'ส่งข้อความ' }))
+
     await waitFor(() => {
-      expect(screen.getByText('LIVE')).toBeInTheDocument()
+      expect(execute).toHaveBeenCalledWith('ช่วยผมทดสอบระบบ', 'smart_chat')
     })
-    expect(screen.getByText(/สถานะ Gateway:/)).toHaveTextContent('CONNECTED')
-    expect(screen.queryByText(/Mock Adapter ทำงาน/)).not.toBeInTheDocument()
+    await waitFor(
+      () => expect(screen.getByText('คำตอบจริงจาก runtime')).toBeInTheDocument(),
+      { timeout: 1500 },
+    )
+  })
+
+  it('hands the landing composer prompt to /chat with a compact send control', () => {
+    render(<V11Landing />)
+
+    const input = screen.getByPlaceholderText(/พิมพ์ข้อความ/)
+    fireEvent.change(input, { target: { value: 'ถามจากหน้าแรก' } })
+
+    const sendButton = screen.getByRole('button', { name: 'ส่งข้อความ' })
+    fireEvent.click(sendButton)
+
+    expect(peekPendingPrompt()).toBe('ถามจากหน้าแรก')
+    expect(pushMock).toHaveBeenCalledWith('/chat')
+    expect(screen.queryByText('เริ่มต้นใช้งาน')).not.toBeInTheDocument()
   })
 })
