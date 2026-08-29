@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { SmartChatView } from '../components/v11/components/chat/SmartChatView'
 import { V11Landing } from '../components/v11/V11Landing'
@@ -113,13 +113,15 @@ describe('V11 two chat entrypoints', () => {
     render(<V11Landing />)
 
     const input = screen.getByPlaceholderText(/พิมพ์ข้อความ/)
-    fireEvent.change(input, { target: { value: 'ถามจากหน้าแรก' } })
+    const form = input.closest('form')
+    expect(form).not.toBeNull()
+    const composer = within(form as HTMLFormElement)
 
-    const sendButton = screen.getByRole('button', { name: 'ส่งข้อความ' })
-    fireEvent.click(sendButton)
+    fireEvent.change(input, { target: { value: 'ถามจากหน้าแรก' } })
+    fireEvent.click(composer.getByRole('button', { name: 'ส่งข้อความ' }))
 
     expect(peekPendingPrompt()).toBe('ถามจากหน้าแรก')
     expect(pushMock).toHaveBeenCalledWith('/chat')
-    expect(screen.queryByText('เริ่มต้นใช้งาน')).not.toBeInTheDocument()
+    expect(composer.queryByText('เริ่มต้นใช้งาน')).not.toBeInTheDocument()
   })
 })
