@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { SmartChatView } from '../components/v11/components/chat/SmartChatView'
 import {
   GatewayRuntimeAdapter,
@@ -20,6 +20,10 @@ const connectedStatus: RuntimeGatewayStatus = {
   version: 'V11.0.4-beta',
   lastChecked: '2026-08-30T00:00:00.000Z',
 }
+
+beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn()
+})
 
 afterEach(() => {
   vi.restoreAllMocks()
