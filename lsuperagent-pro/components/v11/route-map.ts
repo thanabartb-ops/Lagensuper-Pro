@@ -14,6 +14,7 @@ export const routeToPath: Record<AppRoute, string> = {
 }
 
 export function pathToRoute(pathname: string): AppRoute {
+  if (pathname === '/tools') return 'projects'
   const match = Object.entries(routeToPath).find(([, path]) => path === pathname)
   return (match?.[0] as AppRoute | undefined) ?? 'landing'
 }

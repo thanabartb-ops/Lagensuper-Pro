@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StatusBadge } from '../common/StatusBadge';
 import { GradientButton } from '../common/GradientButton';
 import {
@@ -15,11 +15,54 @@ export const SettingsView: React.FC = () => {
   const [workspaceName, setWorkspaceName] = useState('My LSUPERAGENT Workspace');
   const [reducedMotion, setReducedMotion] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = window.setTimeout(() => {
+      if (cancelled) return;
+      try {
+        const stored = window.localStorage.getItem('lsuperagent.v11.settings');
+        if (!stored) return;
+        const parsed = JSON.parse(stored) as {
+          workspaceName?: unknown;
+          reducedMotion?: unknown;
+        };
+        if (typeof parsed.workspaceName === 'string') setWorkspaceName(parsed.workspaceName);
+        if (typeof parsed.reducedMotion === 'boolean') setReducedMotion(parsed.reducedMotion);
+      } catch {
+        // Keep safe defaults when storage is unavailable or malformed.
+      }
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(load);
+    };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('reduce-motion', reducedMotion);
+    return () => document.documentElement.classList.remove('reduce-motion');
+  }, [reducedMotion]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
+    try {
+      window.localStorage.setItem(
+        'lsuperagent.v11.settings',
+        JSON.stringify({ workspaceName, reducedMotion }),
+      );
+      setSavedSuccess(true);
+      setSaveFailed(false);
+    } catch {
+      setSavedSuccess(false);
+      setSaveFailed(true);
+    }
+    setTimeout(() => {
+      setSavedSuccess(false);
+      setSaveFailed(false);
+    }, 2500);
   };
 
   return (
@@ -54,10 +97,11 @@ export const SettingsView: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-white/50 mb-1.5">
+              <label htmlFor="workspace-name" className="block text-xs font-bold text-white/50 mb-1.5">
                 ชื่อเวิร์กสเปซ (Workspace Name)
               </label>
               <input
+                id="workspace-name"
                 type="text"
                 value={workspaceName}
                 onChange={(e) => setWorkspaceName(e.target.value)}
@@ -124,6 +168,7 @@ export const SettingsView: React.FC = () => {
             </div>
             <input
               type="checkbox"
+              aria-label="ลดทอนการเคลื่อนไหว"
               checked={reducedMotion}
               onChange={(e) => setReducedMotion(e.target.checked)}
               className="w-5 h-5 accent-[#7B2CFE] rounded cursor-pointer"
@@ -157,6 +202,10 @@ export const SettingsView: React.FC = () => {
           {savedSuccess ? (
             <span className="text-xs text-emerald-400 font-bold flex items-center gap-1.5 animate-in fade-in">
               <Check className="w-4 h-4" /> บันทึกการตั้งค่าเรียบร้อยแล้ว
+            </span>
+          ) : saveFailed ? (
+            <span className="text-xs text-red-400 font-bold flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4" /> บันทึกไม่สำเร็จในเบราว์เซอร์นี้
             </span>
           ) : (
             <span className="text-xs text-white/40">การตั้งค่าจะถูกจัดเก็บในเครื่องของคุณ</span>

@@ -45,10 +45,10 @@ export const AuditView: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold text-white">บันทึกการตรวจสอบ (Audit Log)</h2>
-              <StatusBadge type="ready" text="Supabase Ready" size="sm" />
+              <StatusBadge type="simulated" text="Local Verification (No Supabase Linked)" size="sm" />
             </div>
             <p className="text-xs sm:text-sm text-white/50">
-              บันทึกกิจกรรม คำสั่ง และประวัติการประมวลผลทั้งหมดเพื่อความโปร่งใส
+              ตัวอย่างหน้าบันทึกกิจกรรม · ข้อมูลที่แสดงเป็นชุดตัวอย่างคงที่ ยังไม่ได้ต่อฐานข้อมูลจริง
             </p>
           </div>
         </div>

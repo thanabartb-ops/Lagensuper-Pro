@@ -108,7 +108,16 @@ export interface AgentTask {
   id: string;
   objective: string;
   mode: 'autonomous' | 'supervised' | 'manual_approval';
-  status: 'idle' | 'planning' | 'executing' | 'completed' | 'failed' | 'paused';
+  status:
+    | 'idle'
+    | 'planning'
+    | 'executing'
+    | 'awaiting_approval'
+    | 'completed'
+    | 'failed'
+    | 'paused';
+  /** Index of the step currently running or awaiting approval. */
+  currentStep: number;
   steps: AgentStep[];
   logs: string[];
   createdAt: string;

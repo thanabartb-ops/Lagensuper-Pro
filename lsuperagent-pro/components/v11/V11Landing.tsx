@@ -8,6 +8,7 @@ import { HeroSection } from './components/landing/HeroSection'
 import { ServicesSection } from './components/landing/ServicesSection'
 import { ToolDetailSection } from './components/landing/ToolDetailSection'
 import { routeToPath } from './route-map'
+import { setPendingPrompt } from './services/promptHandoff'
 import type { AppRoute } from './types'
 
 export function V11Landing() {
@@ -20,6 +21,12 @@ export function V11Landing() {
     document.getElementById('dashboard')?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  // Carry the typed prompt across the route change instead of dropping it.
+  const handleSearchSubmit = (query: string) => {
+    setPendingPrompt(query)
+    navigate('smart_chat')
+  }
+
   const handleSelectTool = (toolId: string) => {
     setSelectedToolId(toolId)
     requestAnimationFrame(() => {
@@ -29,8 +36,8 @@ export function V11Landing() {
 
   return (
     <div className="w-full space-y-4">
-      <HeroSection onStartClick={handleStart} onRouteChange={navigate} />
-      <DashboardSection onRouteChange={navigate} onSearchSubmit={() => navigate('smart_chat')} />
+      <HeroSection onStartClick={handleStart} />
+      <DashboardSection onRouteChange={navigate} onSearchSubmit={handleSearchSubmit} />
       <ServicesSection
         selectedToolId={selectedToolId}
         onSelectTool={handleSelectTool}

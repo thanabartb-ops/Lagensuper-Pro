@@ -1,6 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ChatMessage, StreamingStatus } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
+import { defaultRuntimeAdapter } from '../../services/runtimeAdapter';
+import { takePendingPrompt } from '../../services/promptHandoff';
 import {
   Send,
   Sparkles,
@@ -33,6 +39,35 @@ export const SmartChatView: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Everything that must be torn down when the user presses Stop, or when the
+  // component unmounts mid-stream. Previously the typing interval kept running
+  // after Stop and still marked the message completed.
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const trackTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = setTimeout(fn, ms);
+    timeoutsRef.current.push(id);
+    return id;
+  }, []);
+
+  const teardown = useCallback(() => {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
+  }, []);
+
+  // Never leave a timer running after the view goes away.
+  useEffect(() => teardown, [teardown]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -41,80 +76,123 @@ export const SmartChatView: React.FC = () => {
     scrollToBottom();
   }, [messages, streamingStatus]);
 
-  const handleSendMessage = (textToSend?: string) => {
-    const text = (textToSend || inputValue).trim();
-    if (!text || streamingStatus === 'running' || streamingStatus === 'queued') return;
+  const handleSendMessage = useCallback(
+    async (textToSend?: string) => {
+      const text = (textToSend ?? inputValue).trim();
+      if (!text || streamingStatus === 'running' || streamingStatus === 'queued') return;
 
-    const userMsgId = `user-${messages.length + 1}`;
-    const userMsg: ChatMessage = {
-      id: userMsgId,
-      sender: 'user',
-      content: text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'completed',
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInputValue('');
-    setStreamingStatus('queued');
-
-    // Simulate realistic streaming lifecycle with honest DEMO flag
-    setTimeout(() => {
-      setStreamingStatus('running');
-
-      const botMsgId = `bot-${userMsgId}`;
-      const fullResponse = `ได้รับข้อความ: "${text}" แล้วครับ!\n\nในการประมวลผลจริง ระบบจะวิเคราะห์โครงสร้างและสังเคราะห์คำตอบตามบริบทภาษาไทยอย่างแม่นยำ\n\n**ข้อเสนอแนะเบื้องต้น:**\n1. กำหนดกลุ่มเป้าหมายและผลลัพธ์ที่ต้องการให้ชัดเจน\n2. นำข้อมูลหลักมาจัดลำดับความสำคัญก่อนนำไปผลิตผลงาน\n3. ใช้เครื่องมือย่อยเช่น **Deep Research** หรือ **Image Generator** เสริมความสมบูรณ์\n\n*(จำลองการตอบกลับผ่าน MockRuntimeAdapter · สถานะ: NOT_CONNECTED)*`;
-
-      let currentLength = 0;
-      const initialBotMsg: ChatMessage = {
-        id: botMsgId,
-        sender: 'assistant',
-        content: '',
+      const userMsg: ChatMessage = {
+        id: `user-${Date.now()}`,
+        sender: 'user',
+        content: text,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'partial',
-        isDemo: true,
+        status: 'completed',
       };
 
-      setMessages((prev) => [...prev, initialBotMsg]);
+      setMessages((prev) => [...prev, userMsg]);
+      setInputValue('');
+      setStreamingStatus('queued');
 
-      const interval = setInterval(() => {
-        currentLength += 15;
-        if (currentLength >= fullResponse.length) {
-          clearInterval(interval);
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === botMsgId
-                ? { ...m, content: fullResponse, status: 'completed' }
-                : m
-            )
-          );
-          setStreamingStatus('completed');
-          setTimeout(() => setStreamingStatus('idle'), 500);
-        } else {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === botMsgId
-                ? { ...m, content: fullResponse.slice(0, currentLength), status: 'partial' }
-                : m
-            )
-          );
-        }
-      }, 60);
-    }, 400);
-  };
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-  const handleStopStreaming = () => {
+      try {
+        setStreamingStatus('running');
+        const botMsgId = `bot-${Date.now()}`;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: botMsgId,
+            sender: 'assistant',
+            content: '',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: 'partial',
+            isDemo: false,
+          },
+        ]);
+
+        const result = await defaultRuntimeAdapter.executePrompt(text, 'smart_chat');
+
+        // The user may have pressed Stop while the request was in flight.
+        if (controller.signal.aborted) return;
+
+        const fullResponse = result.message;
+        const isDemo = result.status !== 'SUCCESS';
+
+        let currentLength = 0;
+        intervalRef.current = setInterval(() => {
+          if (controller.signal.aborted) {
+            if (intervalRef.current !== null) clearInterval(intervalRef.current);
+            intervalRef.current = null;
+            return;
+          }
+
+          currentLength += 20;
+
+          if (currentLength >= fullResponse.length) {
+            if (intervalRef.current !== null) clearInterval(intervalRef.current);
+            intervalRef.current = null;
+            abortRef.current = null;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === botMsgId ? { ...m, content: fullResponse, status: 'completed', isDemo } : m
+              )
+            );
+            setStreamingStatus('completed');
+            trackTimeout(() => setStreamingStatus('idle'), 500);
+          } else {
+            const slice = fullResponse.slice(0, currentLength);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === botMsgId ? { ...m, content: slice, status: 'partial', isDemo } : m
+              )
+            );
+          }
+        }, 40);
+      } catch {
+        if (controller.signal.aborted) return;
+        setStreamingStatus('failed');
+        trackTimeout(() => setStreamingStatus('idle'), 800);
+      }
+    },
+    [inputValue, streamingStatus, trackTimeout]
+  );
+
+  /**
+   * Stop actually stops: clears the typing interval, aborts the in-flight
+   * request, and freezes the partial message instead of letting it finish.
+   */
+  const handleStopStreaming = useCallback(() => {
+    teardown();
+    setMessages((prev) =>
+      prev.map((m) => (m.status === 'partial' ? { ...m, status: 'cancelled' } : m))
+    );
     setStreamingStatus('cancelled');
-    setTimeout(() => setStreamingStatus('idle'), 600);
-  };
+    trackTimeout(() => setStreamingStatus('idle'), 600);
+  }, [teardown, trackTimeout]);
+
+  // A prompt typed on the landing page arrives here and is sent once.
+  const handoffConsumed = useRef(false);
+  useEffect(() => {
+    if (handoffConsumed.current) return;
+    handoffConsumed.current = true;
+    const pending = takePendingPrompt();
+    // sessionStorage is only readable on the client, so this hand-off can only
+    // run after mount.
+    if (!pending) return;
+    const send = window.setTimeout(() => void handleSendMessage(pending), 0);
+    return () => window.clearTimeout(send);
+  }, [handleSendMessage]);
 
   const handleCopy = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
+    void navigator.clipboard?.writeText(text);
     setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    trackTimeout(() => setCopiedId(null), 2000);
   };
 
   const handleClearChat = () => {
+    teardown();
+    setStreamingStatus('idle');
     setMessages([
       {
         id: 'msg-init',
@@ -134,6 +212,8 @@ export const SmartChatView: React.FC = () => {
     'ช่วยตั้งชื่อแคมเปญการตลาดใหม่',
   ];
 
+  const isStreaming = streamingStatus === 'running' || streamingStatus === 'queued';
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] max-w-[1120px] mx-auto px-2 sm:px-6 pb-16 md:pb-6">
       {/* Surface Header */}
@@ -147,9 +227,7 @@ export const SmartChatView: React.FC = () => {
               <h2 className="text-sm sm:text-base font-bold text-white">LS_BOTAGENT (Smart Chat)</h2>
               <StatusBadge type="demo" text="DEMO" size="sm" />
             </div>
-            <p className="text-[11px] text-white/50">
-              โหมดถาม-ตอบอัจฉริยะภาษาไทย · V11 Public Beta
-            </p>
+            <p className="text-[11px] text-white/50">โหมดถาม-ตอบอัจฉริยะภาษาไทย · V11 Public Beta</p>
           </div>
         </div>
 
@@ -169,12 +247,14 @@ export const SmartChatView: React.FC = () => {
       <div className="mb-2 px-3.5 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-300 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-          <span>สถานะ Gateway: <strong>NOT_CONNECTED</strong> (ระบบกำลังแสดงผลด้วย Mock Adapter เพื่อความปลอดภัย)</span>
+          <span>
+            สถานะ Gateway: <strong>NOT_CONNECTED</strong> (Mock Adapter ทำงาน)
+          </span>
         </div>
         <StatusBadge type="not_connected" text="OFFLINE" size="sm" />
       </div>
 
-      {/* Messages Thread Container */}
+      {/* Messages Thread */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 rounded-2xl bg-[#0C0D1A] border border-[#312E81]">
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
@@ -185,7 +265,6 @@ export const SmartChatView: React.FC = () => {
                 isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'
               }`}
             >
-              {/* Avatar */}
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 text-xs ${
                   isUser
@@ -196,23 +275,28 @@ export const SmartChatView: React.FC = () => {
                 {isUser ? <User className="w-4 h-4 text-black" /> : <Bot className="w-4 h-4" />}
               </div>
 
-              {/* Message Bubble Card */}
               <div
-                className={`p-4 rounded-2xl text-sm leading-relaxed transition-all shadow-md ${
+                className={`min-w-0 p-4 rounded-2xl text-sm leading-relaxed transition-all shadow-md ${
                   isUser
                     ? 'bg-[#1E2338] text-white border border-[#312E81]'
                     : 'bg-[#131525] text-white/90 border border-[#312E81]'
                 }`}
               >
-                <div className="whitespace-pre-wrap font-sans">{msg.content}</div>
+                {isUser ? (
+                  <div className="whitespace-pre-wrap font-sans break-words">{msg.content}</div>
+                ) : (
+                  <div className="v11-markdown min-w-0 break-words">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                  </div>
+                )}
 
-                {/* Bubble Footer */}
                 <div className="flex items-center justify-between gap-4 mt-2 pt-1 border-t border-white/5 text-[11px] text-white/40">
                   <span>{msg.timestamp}</span>
                   <div className="flex items-center gap-2">
-                    {msg.isDemo && (
-                      <span className="text-[10px] text-yellow-500 font-mono">DEMO</span>
+                    {msg.status === 'cancelled' && (
+                      <span className="text-[10px] text-red-400 font-mono">STOPPED</span>
                     )}
+                    {msg.isDemo && <span className="text-[10px] text-yellow-500 font-mono">DEMO</span>}
                     {!isUser && (
                       <button
                         onClick={() => handleCopy(msg.id, msg.content)}
@@ -233,7 +317,6 @@ export const SmartChatView: React.FC = () => {
           );
         })}
 
-        {/* Streaming State Indicator */}
         {streamingStatus === 'running' && (
           <div className="flex items-center gap-2 text-xs text-[#7B2CFE] animate-pulse pl-11">
             <Sparkles className="w-4 h-4" />
@@ -244,7 +327,14 @@ export const SmartChatView: React.FC = () => {
         {streamingStatus === 'queued' && (
           <div className="flex items-center gap-2 text-xs text-[#00D1FF] animate-pulse pl-11">
             <span className="w-2 h-2 rounded-full bg-[#00D1FF]" />
-            <span>กำลังจัดคิวคำขอใน MockRuntimeAdapter...</span>
+            <span>กำลังจัดคิวคำขอ...</span>
+          </div>
+        )}
+
+        {streamingStatus === 'cancelled' && (
+          <div className="flex items-center gap-2 text-xs text-red-400 pl-11">
+            <Square className="w-3.5 h-3.5" />
+            <span>หยุดการตอบแล้ว</span>
           </div>
         )}
 
@@ -266,16 +356,15 @@ export const SmartChatView: React.FC = () => {
         </div>
       )}
 
-      {/* Input Composer Box */}
-      <div className="pt-2">
+      {/* Composer */}
+      <div className="relative pt-2">
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            handleSendMessage();
+            void handleSendMessage();
           }}
           className="relative flex items-center gap-2 bg-[#131525] border border-[#312E81] focus-within:border-[#7B2CFE] rounded-2xl p-2 transition-all shadow-lg"
         >
-          {/* Action buttons */}
           <button
             type="button"
             className="w-10 h-10 rounded-xl text-white/40 hover:text-white hover:bg-[#1A1C30] flex items-center justify-center transition-colors min-h-[44px] min-w-[44px]"
@@ -284,16 +373,14 @@ export const SmartChatView: React.FC = () => {
             <Paperclip className="w-4 h-4" />
           </button>
 
-          {/* Text Input */}
           <input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="พิมพ์คำถามหรือข้อความที่ต้องการให้ AI ช่วย..."
-            className="flex-1 bg-transparent text-sm sm:text-base text-white placeholder:text-white/30 outline-none px-2"
+            placeholder="พิมพ์คำถามของคุณ..."
+            className="flex-1 min-w-0 bg-transparent text-sm sm:text-base text-white placeholder:text-white/30 outline-none px-2"
           />
 
-          {/* Voice input */}
           <button
             type="button"
             className="w-10 h-10 rounded-xl text-white/40 hover:text-white hover:bg-[#1A1C30] flex items-center justify-center transition-colors min-h-[44px] min-w-[44px]"
@@ -302,8 +389,7 @@ export const SmartChatView: React.FC = () => {
             <Mic className="w-4 h-4" />
           </button>
 
-          {/* Send or Stop button */}
-          {streamingStatus === 'running' ? (
+          {isStreaming ? (
             <button
               type="button"
               onClick={handleStopStreaming}

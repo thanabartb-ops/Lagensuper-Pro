@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { StatusBadge } from '../common/StatusBadge';
 import { GradientButton } from '../common/GradientButton';
 import { ResearchTask } from '../../types';
@@ -12,14 +14,79 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
+type ResearchDepth = 'standard' | 'deep' | 'comprehensive';
+
+/**
+ * The depth selector is not cosmetic: it drives how long each pipeline stage
+ * takes, how many key findings the report carries, and how many sources are
+ * consulted. Previously every depth ran the identical 3.8s script.
+ */
+const DEPTH_PROFILE: Record<
+  ResearchDepth,
+  { stageMs: number; keyFindings: number; sources: string[]; dimensions: number; indicators: number }
+> = {
+  standard: {
+    stageMs: 700,
+    keyFindings: 3,
+    sources: ['Thai AI Consortium'],
+    dimensions: 3,
+    indicators: 6,
+  },
+  deep: {
+    stageMs: 1200,
+    keyFindings: 5,
+    sources: ['IEEE Research (2025)', 'MIT Tech Review', 'Thai AI Consortium'],
+    dimensions: 5,
+    indicators: 12,
+  },
+  comprehensive: {
+    stageMs: 2000,
+    keyFindings: 8,
+    sources: [
+      'IEEE Research (2025)',
+      'MIT Tech Review',
+      'Thai AI Consortium',
+      'Global AI Readiness Index',
+      'OECD Digital Outlook',
+    ],
+    dimensions: 8,
+    indicators: 24,
+  },
+};
+
+const FINDING_POOL = [
+  '**การผสานเทคโนโลยี:** เพิ่มประสิทธิภาพการทำงานขึ้น 35-50%',
+  '**การกำกับดูแล:** ความปลอดภัยของข้อมูลและความโปร่งใสของระบบ',
+  '**ความพร้อมของบุคลากร:** ทักษะการสั่งการ (Prompt Engineering) และการคิดเชิงวิพากษ์',
+  '**ต้นทุนการดำเนินงาน:** ค่าใช้จ่ายต่อหน่วยงานลดลงเมื่อขยายการใช้งาน',
+  '**การยอมรับของผู้ใช้:** ต้องมีช่วงปรับตัวและการฝึกอบรมที่ชัดเจน',
+  '**ความเสี่ยงด้านข้อมูล:** การรั่วไหลและการกำกับสิทธิ์การเข้าถึง',
+  '**การวัดผล:** ต้องกำหนดตัวชี้วัดก่อนเริ่มใช้งานจริง',
+  '**ความยั่งยืน:** แผนบำรุงรักษาและการอัปเดตโมเดลระยะยาว',
+];
+
 export const DeepResearchView: React.FC = () => {
   const [query, setQuery] = useState('');
-  const [depth, setDepth] = useState<'standard' | 'deep' | 'comprehensive'>('deep');
+  const [depth, setDepth] = useState<ResearchDepth>('deep');
   const [task, setTask] = useState<ResearchTask | null>(null);
   const [copied, setCopied] = useState(false);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clearTimers = useCallback(() => {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+  }, []);
+
+  useEffect(() => clearTimers, [clearTimers]);
 
   const startResearch = () => {
     if (!query.trim()) return;
+
+    clearTimers();
+    const profile = DEPTH_PROFILE[depth];
+    const at = (multiplier: number, fn: () => void) => {
+      timersRef.current.push(setTimeout(fn, profile.stageMs * multiplier));
+    };
 
     const newTask: ResearchTask = {
       id: `res-${Date.now()}`,
@@ -53,8 +120,8 @@ export const DeepResearchView: React.FC = () => {
 
     setTask(newTask);
 
-    // Simulate multi-stage research pipeline
-    setTimeout(() => {
+    // Simulate multi-stage research pipeline. Stage length scales with depth.
+    at(1, () => {
       setTask((prev) => {
         if (!prev) return prev;
         return {
@@ -62,16 +129,20 @@ export const DeepResearchView: React.FC = () => {
           status: 'synthesizing',
           steps: prev.steps.map((s, idx) =>
             idx === 0
-              ? { ...s, status: 'completed', findings: 'กำหนด 5 มิติหลักในการวิเคราะห์เสร็จสมบูรณ์' }
+              ? {
+                  ...s,
+                  status: 'completed',
+                  findings: `กำหนด ${profile.dimensions} มิติหลักในการวิเคราะห์เสร็จสมบูรณ์`,
+                }
               : idx === 1
-              ? { ...s, status: 'in_progress', sources: ['IEEE Research (2025)', 'MIT Tech Review', 'Thai AI Consortium'] }
+              ? { ...s, status: 'in_progress', sources: profile.sources }
               : s
           ),
         };
       });
-    }, 1200);
+    });
 
-    setTimeout(() => {
+    at(2, () => {
       setTask((prev) => {
         if (!prev) return prev;
         return {
@@ -81,24 +152,44 @@ export const DeepResearchView: React.FC = () => {
             idx <= 1
               ? { ...s, status: 'completed' }
               : idx === 2
-              ? { ...s, status: 'in_progress', findings: 'ประมวลผลข้อมูลเปรียบเทียบ 12 ดัชนีชี้วัด' }
+              ? {
+                  ...s,
+                  status: 'in_progress',
+                  findings: `ประมวลผลข้อมูลเปรียบเทียบ ${profile.indicators} ดัชนีชี้วัด`,
+                }
               : s
           ),
         };
       });
-    }, 2400);
+    });
 
-    setTimeout(() => {
+    at(3, () => {
       setTask((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
           status: 'completed',
           steps: prev.steps.map((s) => ({ ...s, status: 'completed' })),
-          report: `### รายงานการวิจัยเชิงลึก: "${query}"\n\n**1. บทสรุปผู้บริหาร (Executive Summary)**\nการสืบค้นเชิงลึกพบว่าประเด็น "${query}" มีความสำคัญอย่างยิ่งต่อการขับเคลื่อนยุทธศาสตร์ยุคใหม่ โดยมีปัจจัยหลัก 3 ประการที่ต้องพิจารณา:\n- **การผสานเทคโนโลยี:** เพิ่มประสิทธิภาพการทำงานขึ้น 35-50%\n- **การกำกับดูแล:** ความปลอดภัยของข้อมูลและความโปร่งใสของระบบ\n- **ความพร้อมของบุคลากร:** ทักษะการสั่งการ (Prompt Engineering) และการคิดเชิงวิพากษ์\n\n**2. ผลการวิเคราะห์เชิงเปรียบเทียบ**\nจากการรวบรวมข้อมูลจำลอง พบว่าองค์กรที่ปรับใช้โมเดลเฉพาะทางสามารถลดระยะเวลาดำเนินการวิจัยจาก 7 วันเหลือเพียงไม่กี่ชั่วโมง\n\n**3. แหล่งข้อมูลอ้างอิง (Citations)**\n- รายงานการสำรวจเทคโนโลยีปัญญาประดิษฐ์ภาคภาษาไทย (2026)\n- Global AI Readiness Index · Industry Report\n\n*(รายงานผลลัพธ์นี้สร้างขึ้นผ่าน Mock Deep Research Pipeline · สถานะ: NOT_CONNECTED)*`,
+          report: [
+            `### รายงานการวิจัยเชิงลึก: "${query}"`,
+            '',
+            `**ระดับความลึก:** ${depth} · ${profile.keyFindings} ประเด็นหลัก · ${profile.sources.length} แหล่งอ้างอิง`,
+            '',
+            '**1. บทสรุปผู้บริหาร (Executive Summary)**',
+            `การสืบค้นพบว่าประเด็น "${query}" มีปัจจัยหลัก ${profile.keyFindings} ประการที่ต้องพิจารณา:`,
+            ...FINDING_POOL.slice(0, profile.keyFindings).map((f) => `- ${f}`),
+            '',
+            '**2. ผลการวิเคราะห์เชิงเปรียบเทียบ**',
+            `เปรียบเทียบจาก ${profile.indicators} ดัชนีชี้วัด พบว่าองค์กรที่ปรับใช้โมเดลเฉพาะทางลดระยะเวลาดำเนินการวิจัยลงได้อย่างมีนัยสำคัญ`,
+            '',
+            '**3. แหล่งข้อมูลอ้างอิง (Citations)**',
+            ...profile.sources.map((s) => `- ${s}`),
+            '',
+            '*(รายงานนี้สร้างจากข้อมูลจำลอง · Mock Deep Research Pipeline · สถานะ: NOT_CONNECTED)*',
+          ].join('\n'),
         };
       });
-    }, 3800);
+    });
   };
 
   const handleCopyReport = () => {

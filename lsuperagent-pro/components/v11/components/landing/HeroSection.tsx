@@ -1,14 +1,12 @@
 import React from 'react';
 import { LSLogo } from '../common/LSLogo';
 import { GradientButton } from '../common/GradientButton';
-import { AppRoute } from '../../types';
 
 interface HeroSectionProps {
   onStartClick: () => void;
-  onRouteChange: (route: AppRoute) => void;
 }
 
-export const HeroSection: React.FC<HeroSectionProps> = ({ onStartClick, onRouteChange }) => {
+export const HeroSection: React.FC<HeroSectionProps> = ({ onStartClick }) => {
   return (
     <section className="relative w-full pt-8 pb-12 sm:py-16 flex flex-col items-center justify-center text-center overflow-hidden">
       {/* Background radial gradient glow behind hero */}
@@ -55,10 +53,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onStartClick, onRouteC
 
         {/* Secondary Login Action */}
         <button
-          onClick={() => onRouteChange('settings')}
-          className="mt-4 text-xs sm:text-sm text-white/40 hover:text-white transition-colors cursor-pointer py-1.5 px-3 min-h-[44px] flex items-center justify-center"
+          type="button"
+          disabled
+          aria-disabled="true"
+          title="ระบบยืนยันตัวตนยังไม่พร้อมใน Public Beta Preview"
+          className="mt-4 text-xs sm:text-sm text-white/35 py-1.5 px-3 min-h-[44px] flex items-center justify-center cursor-not-allowed"
         >
-          เข้าสู่ระบบด้วยบัญชีที่มีอยู่
+          ระบบเข้าสู่ระบบยังไม่พร้อม (Preview)
         </button>
       </div>
     </section>

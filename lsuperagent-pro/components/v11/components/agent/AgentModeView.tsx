@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StatusBadge } from '../common/StatusBadge';
 import { GradientButton } from '../common/GradientButton';
 import { AgentTask, AgentStep } from '../../types';
@@ -9,12 +11,107 @@ import {
   RotateCcw,
   Terminal,
   Layers,
+  ShieldQuestion,
 } from 'lucide-react';
+
+/** Simulated duration of one agent step. */
+const STEP_DURATION_MS = 1500;
+
+const STEP_OUTPUTS = [
+  'แยกย่อยเป้าหมายออกเป็น 4 ข้อย่อย สำเร็จ',
+  'ดึงข้อมูลบริบท 3 แหล่งเสร็จสิ้น',
+  'สร้างร่างโครงสร้างสมบูรณ์',
+  'จัดรูปแบบผลลัพธ์และบันทึกเรียบร้อย',
+];
+
+const stamp = () => `[${new Date().toLocaleTimeString()}]`;
 
 export const AgentModeView: React.FC = () => {
   const [objective, setObjective] = useState('');
   const [mode, setMode] = useState<'supervised' | 'autonomous'>('supervised');
   const [task, setTask] = useState<AgentTask | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearTimer, [clearTimer]);
+
+  /**
+   * Advances one step.
+   *
+   * The previous implementation scheduled the whole run up front with fixed
+   * setTimeout calls that bailed out when the task was paused — so pausing
+   * silently skipped those steps for good and the task could never finish.
+   * Progress is now driven step by step from task state, so pause simply stops
+   * scheduling and resume picks up exactly where it left off.
+   */
+  const completeCurrentStep = useCallback(() => {
+    setTask((prev) => {
+      if (!prev || prev.status !== 'executing') return prev;
+
+      const index = prev.currentStep;
+      const isLast = index >= prev.steps.length - 1;
+      const steps = prev.steps.map((s, i) =>
+        i === index ? { ...s, status: 'completed' as const, output: STEP_OUTPUTS[i] ?? s.output } : s
+      );
+      const logs = [...prev.logs, `${stamp()} ขั้นที่ ${index + 1} สำเร็จ: ${prev.steps[index].title}`];
+
+      if (isLast) {
+        return {
+          ...prev,
+          status: 'completed',
+          steps,
+          logs: [...logs, `${stamp()} จบกระบวนการทำงานของเอเจนท์สมบูรณ์ (NOT_CONNECTED Simulation)`],
+        };
+      }
+
+      // Supervised runs stop here and wait for a human to approve the next step.
+      if (prev.mode === 'supervised') {
+        return {
+          ...prev,
+          status: 'awaiting_approval',
+          currentStep: index + 1,
+          steps,
+          logs: [...logs, `${stamp()} รอการอนุมัติจากผู้ใช้ก่อนเริ่มขั้นที่ ${index + 2}`],
+        };
+      }
+
+      return {
+        ...prev,
+        currentStep: index + 1,
+        steps: steps.map((s, i) => (i === index + 1 ? { ...s, status: 'running' as const } : s)),
+        logs,
+      };
+    });
+  }, []);
+
+  // Only an actively executing task schedules work. Pausing stops the clock;
+  // resuming restarts it from the same step.
+  useEffect(() => {
+    clearTimer();
+    if (!task || task.status !== 'executing') return;
+    timerRef.current = setTimeout(completeCurrentStep, STEP_DURATION_MS);
+    return clearTimer;
+  }, [task, completeCurrentStep, clearTimer]);
+
+  const approveNextStep = () => {
+    setTask((prev) => {
+      if (!prev || prev.status !== 'awaiting_approval') return prev;
+      return {
+        ...prev,
+        status: 'executing',
+        steps: prev.steps.map((s, i) =>
+          i === prev.currentStep ? { ...s, status: 'running' as const } : s
+        ),
+        logs: [...prev.logs, `${stamp()} ผู้ใช้อนุมัติให้ดำเนินขั้นที่ ${prev.currentStep + 1}`],
+      };
+    });
+  };
 
   const startAgentExecution = () => {
     if (!objective.trim()) return;
@@ -52,6 +149,7 @@ export const AgentModeView: React.FC = () => {
       objective: objective.trim(),
       mode,
       status: 'executing',
+      currentStep: 0,
       steps: initialSteps,
       logs: [
         `[${new Date().toLocaleTimeString()}] เริ่มต้นกระบวนการ Agent Mode: "${objective.trim()}"`,
@@ -63,79 +161,32 @@ export const AgentModeView: React.FC = () => {
 
     setTask(newTask);
 
-    // Step 2
-    setTimeout(() => {
-      setTask((prev) => {
-        if (!prev || prev.status === 'paused') return prev;
-        return {
-          ...prev,
-          steps: prev.steps.map((s, i) =>
-            i === 0
-              ? { ...s, status: 'completed' }
-              : i === 1
-              ? { ...s, status: 'running', output: 'ดึงข้อมูลบริบท 3 แหล่งเสร็จสิ้น' }
-              : s
-          ),
-          logs: [...prev.logs, `[${new Date().toLocaleTimeString()}] ขั้นที่ 1 สำเร็จ: วิเคราะห์เป้าหมาย`],
-        };
-      });
-    }, 1500);
-
-    // Step 3
-    setTimeout(() => {
-      setTask((prev) => {
-        if (!prev || prev.status === 'paused') return prev;
-        return {
-          ...prev,
-          steps: prev.steps.map((s, i) =>
-            i <= 1
-              ? { ...s, status: 'completed' }
-              : i === 2
-              ? { ...s, status: 'running', output: 'สร้างร่างโครงสร้างสมบูรณ์' }
-              : s
-          ),
-          logs: [...prev.logs, `[${new Date().toLocaleTimeString()}] ขั้นที่ 2 สำเร็จ: รวบรวมบริบท`],
-        };
-      });
-    }, 3000);
-
-    // Step 4
-    setTimeout(() => {
-      setTask((prev) => {
-        if (!prev || prev.status === 'paused') return prev;
-        return {
-          ...prev,
-          status: 'completed',
-          steps: prev.steps.map((s) => ({ ...s, status: 'completed' })),
-          logs: [
-            ...prev.logs,
-            `[${new Date().toLocaleTimeString()}] ขั้นที่ 3 และ 4 สำเร็จ`,
-            `[${new Date().toLocaleTimeString()}] จบกระบวนการทำงานของเอเจนท์สมบูรณ์ (NOT_CONNECTED Simulation)`,
-          ],
-        };
-      });
-    }, 4500);
+    // Execution is advanced by the effect above, one step at a time.
   };
 
   const togglePause = () => {
-    if (!task) return;
-    setTask((prev) =>
-      prev
-        ? {
-            ...prev,
-            status: prev.status === 'paused' ? 'executing' : 'paused',
-            logs: [
-              ...prev.logs,
-              `[${new Date().toLocaleTimeString()}] ${
-                prev.status === 'paused' ? 'ดำเนินการต่อ' : 'หยุดชั่วคราวโดยผู้ใช้'
-              }`,
-            ],
-          }
-        : null
-    );
+    setTask((prev) => {
+      if (!prev) return prev;
+      // Only a running or paused task can be toggled. A task waiting for
+      // approval is already stopped — the approval banner drives it instead.
+      if (prev.status !== 'executing' && prev.status !== 'paused') return prev;
+
+      const resuming = prev.status === 'paused';
+      return {
+        ...prev,
+        status: resuming ? 'executing' : 'paused',
+        steps: prev.steps.map((s, i) =>
+          i === prev.currentStep && (s.status === 'running' || s.status === 'paused')
+            ? { ...s, status: resuming ? ('running' as const) : ('paused' as const) }
+            : s
+        ),
+        logs: [...prev.logs, `${stamp()} ${resuming ? 'ดำเนินการต่อ' : 'หยุดชั่วคราวโดยผู้ใช้'}`],
+      };
+    });
   };
 
   const resetTask = () => {
+    clearTimer();
     setTask(null);
     setObjective('');
   };
@@ -229,13 +280,18 @@ export const AgentModeView: React.FC = () => {
                 <h3 className="text-base font-bold text-white">ขั้นตอนการดำเนินงาน</h3>
               </div>
               <div className="flex items-center gap-2">
-                {task.status !== 'completed' && (
+                {(task.status === 'executing' || task.status === 'paused') && (
                   <button
                     onClick={togglePause}
-                    className="p-2 rounded-xl bg-[#0C0D1A] border border-[#312E81] text-xs text-white hover:border-[#7B2CFE]"
+                    className="rounded-xl bg-[#0C0D1A] border border-[#312E81] text-xs text-white hover:border-[#7B2CFE] min-h-[44px] min-w-[44px] flex items-center justify-center"
+                    aria-label={task.status === 'paused' ? 'ดำเนินการต่อ' : 'หยุดชั่วคราว'}
                     title={task.status === 'paused' ? 'ดำเนินการต่อ' : 'หยุดชั่วคราว'}
                   >
-                    {task.status === 'paused' ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4 text-yellow-400" />}
+                    {task.status === 'paused' ? (
+                      <Play className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <Pause className="w-4 h-4 text-yellow-400" />
+                    )}
                   </button>
                 )}
                 <button
@@ -247,6 +303,37 @@ export const AgentModeView: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* Human-in-the-loop gate. In supervised mode the run stops here
+                until a person explicitly approves the next step. */}
+            {task.status === 'awaiting_approval' && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                <div className="flex items-start gap-2.5">
+                  <ShieldQuestion className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="block text-xs font-bold text-amber-200">
+                      รออนุมัติก่อนดำเนินขั้นที่ {task.currentStep + 1}
+                    </span>
+                    <span className="block text-[11px] text-amber-200/70">
+                      {task.steps[task.currentStep]?.title}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={approveNextStep}
+                  className="shrink-0 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold min-h-[44px]"
+                >
+                  อนุมัติและดำเนินการต่อ
+                </button>
+              </div>
+            )}
+
+            {task.status === 'paused' && (
+              <div className="p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-[11px] text-yellow-200 flex items-center gap-2">
+                <Pause className="w-4 h-4 shrink-0" />
+                หยุดชั่วคราวที่ขั้นที่ {task.currentStep + 1} · กด Play เพื่อทำต่อจากจุดเดิม
+              </div>
+            )}
 
             <div className="space-y-3">
               {task.steps.map((step, index) => (

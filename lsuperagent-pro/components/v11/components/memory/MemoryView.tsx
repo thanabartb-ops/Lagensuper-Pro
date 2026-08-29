@@ -11,7 +11,11 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-type EditableMemoryCategory = Exclude<MemoryEntry['category'], 'user_profile'>;
+/** Categories a user can pick when creating an entry by hand. */
+type NewMemoryCategory = Extract<
+  MemoryEntry['category'],
+  'preference' | 'project_rule' | 'context_fact'
+>;
 
 export const MemoryView: React.FC = () => {
   const [memories, setMemories] = useState<MemoryEntry[]>([
@@ -48,7 +52,7 @@ export const MemoryView: React.FC = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
-  const [newCategory, setNewCategory] = useState<EditableMemoryCategory>('project_rule');
+  const [newCategory, setNewCategory] = useState<NewMemoryCategory>('project_rule');
 
   const handleAddMemory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,18 +112,18 @@ export const MemoryView: React.FC = () => {
         </button>
       </div>
 
-      {/* Supabase Authority Notice Banner */}
+      {/* Data Store Notice Banner */}
       <div className="p-4 rounded-2xl bg-[#131525]/90 border border-[#312E81] flex items-start sm:items-center justify-between gap-4 text-xs shadow-lg">
         <div className="flex items-center gap-3">
           <Database className="w-5 h-5 text-[#00D1FF] shrink-0" />
           <div>
-            <span className="font-bold text-white block">Supabase Authority Data Store</span>
+            <span className="font-bold text-white block">In-Memory Store (ยังไม่บันทึกถาวร)</span>
             <span className="text-white/50">
-              Supabase เป็นระบบหลักสำหรับ Authentication, Memory และ Audit Trail (ปัจจุบันทำงานในโหมด Local Cache)
+              ความจำเก็บใน state ของหน้าเว็บเท่านั้น หายเมื่อรีเฟรช · ระบบจัดเก็บถาวรอยู่ในแผน ยังไม่ได้เชื่อมต่อ
             </span>
           </div>
         </div>
-        <StatusBadge type="not_connected" text="UNSYNCED (NOT_CONNECTED)" size="sm" />
+        <StatusBadge type="not_connected" text="NOT PERSISTED" size="sm" />
       </div>
 
       {/* Add Memory Modal/Card */}
@@ -146,7 +150,7 @@ export const MemoryView: React.FC = () => {
               <label className="block text-xs font-bold text-white/50 mb-1">หมวดหมู่</label>
               <select
                 value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value as EditableMemoryCategory)}
+                onChange={(e) => setNewCategory(e.target.value as NewMemoryCategory)}
                 className="w-full h-11 px-3 rounded-xl bg-[#0C0D1A] border border-[#312E81] text-xs text-white outline-none focus:border-[#7B2CFE]"
               >
                 <option value="project_rule">กฎของโปรเจกต์ (Project Rule)</option>
@@ -209,9 +213,12 @@ export const MemoryView: React.FC = () => {
                 </span>
                 <h4 className="text-sm font-bold text-white mt-0.5">{item.key}</h4>
               </div>
+              {/* Always visible: a hover-only control is unreachable on touch
+                  devices, and 44x44 is the minimum comfortable touch target. */}
               <button
                 onClick={() => handleDelete(item.id)}
-                className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 p-1 transition-opacity min-h-[32px] min-w-[32px] flex items-center justify-center"
+                className="shrink-0 rounded-xl text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label={`ลบรายการความจำ: ${item.key}`}
                 title="ลบรายการความจำ"
               >
                 <Trash2 className="w-4 h-4" />

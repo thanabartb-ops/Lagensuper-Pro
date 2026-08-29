@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import { StatusBadge } from '../common/StatusBadge';
 import { GradientButton } from '../common/GradientButton';
@@ -10,9 +12,26 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
+type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3';
+
+/**
+ * The preview container must actually take the selected shape. It previously
+ * rendered `aspect-video` (16:9) for every ratio, so a 9:16 portrait request
+ * still previewed as a landscape box.
+ *
+ * Classes are written out in full rather than built by interpolation so that
+ * Tailwind's scanner can see them.
+ */
+const ASPECT_PRESET: Record<AspectRatio, { box: string; label: string }> = {
+  '1:1': { box: 'aspect-square max-w-[380px]', label: 'จัตุรัส' },
+  '16:9': { box: 'aspect-video max-w-[480px]', label: 'แนวนอน' },
+  '9:16': { box: 'aspect-[9/16] max-w-[260px]', label: 'แนวตั้ง' },
+  '4:3': { box: 'aspect-[4/3] max-w-[440px]', label: 'คลาสสิก' },
+};
+
 export const ImageGenView: React.FC = () => {
   const [prompt, setPrompt] = useState('');
-  const [aspectRatio, setAspectRatio] = useState<'1:1' | '16:9' | '9:16' | '4:3'>('16:9');
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
   const [style, setStyle] = useState('Cinematic Cyberpunk & Neon');
   const [activeItem, setActiveItem] = useState<ImageGenerationItem | null>(null);
 
@@ -291,7 +310,9 @@ export const ImageGenView: React.FC = () => {
             <div className="space-y-4 animate-in fade-in duration-300">
               <div className="relative rounded-2xl bg-[#0C0D1A] border border-[#312E81] p-6 text-center overflow-hidden flex flex-col items-center justify-center min-h-[260px]">
                 {/* Visual Watermark Canvas */}
-                <div className="w-full max-w-[480px] aspect-video rounded-xl bg-[#131525] border border-[#7B2CFE]/40 flex flex-col items-center justify-center p-4 relative shadow-2xl">
+                <div
+                  className={`w-full ${ASPECT_PRESET[activeItem.aspectRatio].box} rounded-xl bg-[#131525] border border-[#7B2CFE]/40 flex flex-col items-center justify-center p-4 relative shadow-2xl`}
+                >
                   <div className="absolute top-3 right-3">
                     <StatusBadge type="demo" text="WATERMARK: DEMO ONLY" size="sm" />
                   </div>
