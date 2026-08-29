@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "verify:pages": "node scripts/verify-github-pages-export.mjs",
     "guard:secrets": "python3 .codex/hooks/lsuperagent_guard.py --scan-repo",
     "verify": "pnpm guard:secrets && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
