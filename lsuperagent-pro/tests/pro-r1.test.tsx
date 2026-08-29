@@ -3,14 +3,19 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import Home from '../app/page'
+import { AppShell } from '../components/shell/AppShell'
 
 afterEach(() => cleanup())
 
-describe('LSUPERAGENT PRO R1 contract', () => {
-  it('renders alternate-client identity with disconnected status', () => {
-    render(<Home />)
-    expect(screen.getByRole('heading', { name: /LSUPERAGENT PRO/i })).toBeInTheDocument()
-    expect(screen.getByText('Alternate Client')).toBeInTheDocument()
+describe('LSUPERAGENT V11 client contract', () => {
+  it('renders the public-beta identity with disconnected status', () => {
+    render(
+      <AppShell>
+        <Home />
+      </AppShell>,
+    )
+    expect(screen.getByRole('heading', { name: 'LSUPERAGENT' })).toBeInTheDocument()
+    expect(screen.getAllByText(/V11.*Public Beta/).length).toBeGreaterThan(0)
     expect(screen.getAllByText('NOT_CONNECTED').length).toBeGreaterThan(0)
   })
 

@@ -1,5 +1,5 @@
-import { ModuleStatusPage } from '@/components/modules/ModuleStatusPage'
+import { V11RouteView } from '@/components/v11/V11RouteView'
 
 export default function RuntimePage() {
-  return <ModuleStatusPage title="Runtime" description="Runtime status presentation only. The existing trusted runtime remains authoritative." />
+  return <V11RouteView route="runtime" />
 }

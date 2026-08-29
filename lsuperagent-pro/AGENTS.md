@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # LSUPERAGENT project rules
 
-- Treat this directory as LSUPERAGENT V5 and use LS_BOTAGENT as the UI assistant name.
+- Treat this directory as the LSUPERAGENT V11 Public Beta UI and use LS_BOTAGENT as the UI assistant name.
 - Keep GitHub as the source of truth for code and the existing Supabase runtime as the runtime authority.
 - Do not rebuild or duplicate the runtime to add a feature.
 - Preserve the MVP routes: `smart_chat`, `deep_research`, `create_image`, `agent_mode`, and `memory`.
