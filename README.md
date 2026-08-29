@@ -1,40 +1,55 @@
-# LSUPERAGENT — V11 Public Beta Preview
+# Mintlify Starter Kit
 
-Thai AI Workspace (AI ช่วยคิด ทำไว งานสำเร็จ ทุกไอเดีย...เป็นผลงาน)
+Use the starter kit to get your docs deployed and ready to customize.
 
-## 📌 สถานะระบบและการเชื่อมต่อ (Current State)
-- **สถานะ AI Gateway:** `NOT_CONNECTED`
-- **Adapter ที่ใช้งาน:** `MockRuntimeAdapter` (Provider-Neutral Architecture)
-- **ฐานข้อมูลและสิทธิ์การเข้าถึง:** Supabase Authority สำหรับ Authentication, Memory และ Audit Records
-- **Public Marketing Site:** https://www.wokers-wise.com/
+Click the green **Use this template** button at the top of this repo to copy the Mintlify starter kit. The starter kit contains examples with
 
-## 🛠️ โครงสร้างพื้นผิวการทำงานหลัก (Core Surfaces)
-1. **Landing / Home Dashboard:** Hero, Composer, 5 Quick-Access Cards, Services & Tools, Tool Detail, Closing CTA
-2. **Smart Chat (`smart_chat`):** โหมดถาม-ตอบอัจฉริยะภาษาไทย พร้อมสถานะ Streaming แบบละเอียด
-3. **Deep Research (`deep_research`):** การสืบค้น เจาะลึก และสร้างรายงานสรุปเชิงวิเคราะห์
-4. **Image Generation (`create_image`):** กระบวนการ `request -> BRIEF_PICTURE -> @Approved/@Rejected -> render -> QC`
-5. **Agent Mode (`agent_mode`):** มอบหมายงานให้ AI ดำเนินการเป็นขั้นตอน
-6. **Memory (`memory`):** จัดเก็บบริบทและกฎเกณฑ์สำคัญ
-7. **Settings (`settings`):** กำหนดค่าเวิร์กสเปซและสถานะ Gateway
-8. **Runtime Status (`runtime`):** วินิจฉัยเส้นทางและตรวจสอบสถานะ Adapter
-9. **Audit Log (`audit`):** บันทึกประวัติกิจกรรมของระบบ
+- Guide pages
+- Navigation
+- Customizations
+- API reference pages
+- Use of popular components
 
-## 🚀 การติดตั้งและรันโปรเจกต์ (Setup Instructions)
+**[Follow the full quickstart guide](https://starter.mintlify.com/quickstart)**
+
+## AI-assisted writing
+
+Set up your AI coding tool to work with Mintlify:
+
 ```bash
-# ติดตั้ง dependencies
-npm install
-
-# รันในโหมด Development (Port 3000)
-npm run dev
-
-# ทดสอบ Type checking และ Lint
-npm run lint
-
-# Build สำหรับ Production
-npm run build
+npx skills add https://mintlify.com/docs
 ```
 
-## 🧪 การรันแบบทดสอบ (Testing)
-```bash
-npm run lint
+This command installs Mintlify's documentation skill for your configured AI tools like Claude Code, Cursor, Windsurf, and others. The skill includes component reference, writing standards, and workflow guidance.
+
+See the [AI tools guides](/ai-tools) for tool-specific setup.
+
+## Development
+
+Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
+
 ```
+npm i -g mint
+```
+
+Run the following command at the root of your documentation, where your `docs.json` is located:
+
+```
+mint dev
+```
+
+View your local preview at `http://localhost:3000`.
+
+## Publishing changes
+
+Install our GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app) to propagate changes from your repo to your deployment. Changes are deployed to production automatically after pushing to the default branch.
+
+## Need help?
+
+### Troubleshooting
+
+- If your dev environment isn't running: Run `mint update` to ensure you have the most recent version of the CLI.
+- If a page loads as a 404: Make sure you are running in a folder with a valid `docs.json`.
+
+### Resources
+- [Mintlify documentation](https://mintlify.com/docs)
