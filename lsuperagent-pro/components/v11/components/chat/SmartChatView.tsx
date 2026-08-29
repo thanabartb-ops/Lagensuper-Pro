@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { ChatMessage, StreamingStatus } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { defaultRuntimeAdapter } from '../../services/runtimeAdapter';
-import { takePendingPrompt } from '../../services/promptHandoff';
+import { clearPendingPrompt, peekPendingPrompt } from '../../services/promptHandoff';
 import {
   Send,
   Sparkles,
@@ -39,18 +39,34 @@ export const SmartChatView: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Everything that must be torn down when the user presses Stop, or when the
-  // component unmounts mid-stream. Previously the typing interval kept running
-  // after Stop and still marked the message completed.
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const statusResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const trackTimeout = useCallback((fn: () => void, ms: number) => {
     const id = setTimeout(fn, ms);
     timeoutsRef.current.push(id);
     return id;
   }, []);
+
+  const clearStatusReset = useCallback(() => {
+    if (statusResetRef.current !== null) {
+      clearTimeout(statusResetRef.current);
+      statusResetRef.current = null;
+    }
+  }, []);
+
+  const scheduleStatusReset = useCallback(
+    (ms: number) => {
+      clearStatusReset();
+      statusResetRef.current = setTimeout(() => {
+        statusResetRef.current = null;
+        setStreamingStatus('idle');
+      }, ms);
+    },
+    [clearStatusReset]
+  );
 
   const teardown = useCallback(() => {
     if (intervalRef.current !== null) {
@@ -63,9 +79,9 @@ export const SmartChatView: React.FC = () => {
     }
     timeoutsRef.current.forEach(clearTimeout);
     timeoutsRef.current = [];
-  }, []);
+    clearStatusReset();
+  }, [clearStatusReset]);
 
-  // Never leave a timer running after the view goes away.
   useEffect(() => teardown, [teardown]);
 
   const scrollToBottom = () => {
@@ -80,6 +96,10 @@ export const SmartChatView: React.FC = () => {
     async (textToSend?: string) => {
       const text = (textToSend ?? inputValue).trim();
       if (!text || streamingStatus === 'running' || streamingStatus === 'queued') return;
+
+      // A completed/cancelled response may still own a delayed transition back
+      // to idle. Cancel it before the new request can become running.
+      clearStatusReset();
 
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
@@ -112,8 +132,6 @@ export const SmartChatView: React.FC = () => {
         ]);
 
         const result = await defaultRuntimeAdapter.executePrompt(text, 'smart_chat');
-
-        // The user may have pressed Stop while the request was in flight.
         if (controller.signal.aborted) return;
 
         const fullResponse = result.message;
@@ -139,7 +157,7 @@ export const SmartChatView: React.FC = () => {
               )
             );
             setStreamingStatus('completed');
-            trackTimeout(() => setStreamingStatus('idle'), 500);
+            scheduleStatusReset(500);
           } else {
             const slice = fullResponse.slice(0, currentLength);
             setMessages((prev) =>
@@ -152,42 +170,43 @@ export const SmartChatView: React.FC = () => {
       } catch {
         if (controller.signal.aborted) return;
         setStreamingStatus('failed');
-        trackTimeout(() => setStreamingStatus('idle'), 800);
+        scheduleStatusReset(800);
       }
     },
-    [inputValue, streamingStatus, trackTimeout]
+    [inputValue, streamingStatus, clearStatusReset, scheduleStatusReset]
   );
 
-  /**
-   * Stop actually stops: clears the typing interval, aborts the in-flight
-   * request, and freezes the partial message instead of letting it finish.
-   */
   const handleStopStreaming = useCallback(() => {
     teardown();
     setMessages((prev) =>
       prev.map((m) => (m.status === 'partial' ? { ...m, status: 'cancelled' } : m))
     );
     setStreamingStatus('cancelled');
-    trackTimeout(() => setStreamingStatus('idle'), 600);
-  }, [teardown, trackTimeout]);
+    scheduleStatusReset(600);
+  }, [teardown, scheduleStatusReset]);
 
-  // A prompt typed on the landing page arrives here and is sent once.
-  const handoffConsumed = useRef(false);
+  // Peek first and consume only inside the timer that actually starts delivery.
+  // React Strict Mode may cancel the first setup timer during effect replay; in
+  // that case sessionStorage still contains the prompt for the surviving setup.
   useEffect(() => {
-    if (handoffConsumed.current) return;
-    handoffConsumed.current = true;
-    const pending = takePendingPrompt();
-    // sessionStorage is only readable on the client, so this hand-off can only
-    // run after mount.
+    const pending = peekPendingPrompt();
     if (!pending) return;
-    const send = window.setTimeout(() => void handleSendMessage(pending), 0);
+    const send = window.setTimeout(() => {
+      clearPendingPrompt(pending);
+      void handleSendMessage(pending);
+    }, 0);
     return () => window.clearTimeout(send);
   }, [handleSendMessage]);
 
-  const handleCopy = (id: string, text: string) => {
-    void navigator.clipboard?.writeText(text);
-    setCopiedId(id);
-    trackTimeout(() => setCopiedId(null), 2000);
+  const handleCopy = async (id: string, text: string) => {
+    if (!navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      trackTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      setCopiedId(null);
+    }
   };
 
   const handleClearChat = () => {
@@ -299,7 +318,7 @@ export const SmartChatView: React.FC = () => {
                     {msg.isDemo && <span className="text-[10px] text-yellow-500 font-mono">DEMO</span>}
                     {!isUser && (
                       <button
-                        onClick={() => handleCopy(msg.id, msg.content)}
+                        onClick={() => void handleCopy(msg.id, msg.content)}
                         className="hover:text-white transition-colors p-1"
                         title="คัดลอกข้อความ"
                       >
@@ -347,7 +366,7 @@ export const SmartChatView: React.FC = () => {
           {suggestions.map((sug, i) => (
             <button
               key={i}
-              onClick={() => handleSendMessage(sug)}
+              onClick={() => void handleSendMessage(sug)}
               className="whitespace-nowrap px-3.5 py-1.5 rounded-full bg-[#131525] border border-[#312E81] hover:border-[#7B2CFE] text-xs text-white/50 hover:text-white transition-all cursor-pointer min-h-[36px]"
             >
               💬 {sug}

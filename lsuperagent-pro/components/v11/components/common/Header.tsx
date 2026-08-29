@@ -22,6 +22,14 @@ interface HeaderProps {
   onRouteChange: (route: AppRoute) => void;
 }
 
+const PROJECT_CHILD_ROUTES = new Set<AppRoute>([
+  'deep_research',
+  'create_image',
+  'agent_mode',
+  'runtime',
+  'audit',
+]);
+
 export const Header: React.FC<HeaderProps> = ({ currentRoute, onRouteChange }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -45,6 +53,9 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onRouteChange }) =
     onRouteChange(route);
     setMobileMenuOpen(false);
   };
+
+  const isPrimaryRouteActive = (route: AppRoute) =>
+    currentRoute === route || (route === 'projects' && PROJECT_CHILD_ROUTES.has(currentRoute));
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0C0D1A]/95 backdrop-blur-md border-b border-[#312E81]/40">
@@ -73,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onRouteChange }) =
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1.5">
           {navLinks.map((item) => {
-            const isActive = currentRoute === item.route;
+            const isActive = isPrimaryRouteActive(item.route);
             return (
               <button
                 key={item.route}
@@ -127,7 +138,7 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onRouteChange }) =
 
           <div className="grid grid-cols-1 gap-1">
             {navLinks.map((item) => {
-              const isActive = currentRoute === item.route;
+              const isActive = isPrimaryRouteActive(item.route);
               return (
                 <button
                   key={item.route}

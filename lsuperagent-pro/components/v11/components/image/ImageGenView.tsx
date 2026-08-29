@@ -14,14 +14,6 @@ import {
 
 type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3';
 
-/**
- * The preview container must actually take the selected shape. It previously
- * rendered `aspect-video` (16:9) for every ratio, so a 9:16 portrait request
- * still previewed as a landscape box.
- *
- * Classes are written out in full rather than built by interpolation so that
- * Tailwind's scanner can see them.
- */
 const ASPECT_PRESET: Record<AspectRatio, { box: string; label: string }> = {
   '1:1': { box: 'aspect-square max-w-[380px]', label: 'จัตุรัส' },
   '16:9': { box: 'aspect-video max-w-[480px]', label: 'แนวนอน' },
@@ -74,7 +66,6 @@ export const ImageGenView: React.FC = () => {
 
     setActiveItem((prev) => (prev ? { ...prev, stage: 'rendering', approvalStatus: 'approved', renderProgress: 20 } : null));
 
-    // Simulated rendering progression
     setTimeout(() => {
       setActiveItem((prev) => (prev ? { ...prev, renderProgress: 60 } : null));
     }, 1000);
@@ -114,7 +105,6 @@ export const ImageGenView: React.FC = () => {
 
   return (
     <div className="max-w-[1120px] mx-auto px-4 sm:px-6 py-6 pb-20 md:pb-10 space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-[#131525] border border-[#312E81] rounded-2xl shadow-lg">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-[#7B2CFE]/10 border border-[#7B2CFE]/30 flex items-center justify-center text-[#7B2CFE]">
@@ -134,7 +124,6 @@ export const ImageGenView: React.FC = () => {
         <StatusBadge type="not_connected" text="Gateway: NOT_CONNECTED" size="sm" />
       </div>
 
-      {/* Input Parameters Form */}
       <div className="bg-[#131525]/90 border border-[#312E81] rounded-2xl p-5 sm:p-6 space-y-5 shadow-lg">
         <div>
           <label className="block text-sm font-bold text-white mb-2">
@@ -150,7 +139,6 @@ export const ImageGenView: React.FC = () => {
           />
         </div>
 
-        {/* Aspect Ratio & Style Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-white/50 mb-1.5">
@@ -207,7 +195,6 @@ export const ImageGenView: React.FC = () => {
         )}
       </div>
 
-      {/* Stage: BRIEF_PICTURE & Approval Checkpoint */}
       {activeItem && (
         <div className="bg-[#131525]/90 border border-[#312E81] rounded-2xl p-5 sm:p-6 space-y-6 shadow-xl">
           <div className="flex items-center justify-between border-b border-[#312E81] pb-4">
@@ -232,7 +219,6 @@ export const ImageGenView: React.FC = () => {
             />
           </div>
 
-          {/* Brief Details */}
           {activeItem.briefSummary && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-2xl bg-[#0C0D1A] border border-[#312E81] text-xs sm:text-sm">
               <div>
@@ -256,7 +242,6 @@ export const ImageGenView: React.FC = () => {
             </div>
           )}
 
-          {/* Approval Action Trigger */}
           {activeItem.stage === 'brief_picture' && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0C0D1A] border border-[#7B2CFE]/40">
               <div>
@@ -282,7 +267,6 @@ export const ImageGenView: React.FC = () => {
             </div>
           )}
 
-          {/* Rendering Progress */}
           {(activeItem.stage === 'rendering' || activeItem.stage === 'qc_check') && (
             <div className="p-6 rounded-2xl bg-[#0C0D1A] border border-[#312E81] text-center space-y-4">
               <div className="flex items-center justify-center gap-3 text-sm text-[#7B2CFE] font-bold">
@@ -305,11 +289,9 @@ export const ImageGenView: React.FC = () => {
             </div>
           )}
 
-          {/* Completed Visual & QC Card */}
           {activeItem.stage === 'completed' && (
             <div className="space-y-4 animate-in fade-in duration-300">
               <div className="relative rounded-2xl bg-[#0C0D1A] border border-[#312E81] p-6 text-center overflow-hidden flex flex-col items-center justify-center min-h-[260px]">
-                {/* Visual Watermark Canvas */}
                 <div
                   className={`w-full ${ASPECT_PRESET[activeItem.aspectRatio].box} rounded-xl bg-[#131525] border border-[#7B2CFE]/40 flex flex-col items-center justify-center p-4 relative shadow-2xl`}
                 >
@@ -326,7 +308,6 @@ export const ImageGenView: React.FC = () => {
                 </div>
               </div>
 
-              {/* QC Verification Card */}
               {activeItem.qcResult && (
                 <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-start gap-3">
                   <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
@@ -351,13 +332,14 @@ export const ImageGenView: React.FC = () => {
           )}
 
           {activeItem.stage === 'rejected' && (
-            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 flex items-center justify-between">
-              <span>คำขอถูกยกเลิก (@Rejected) คุณสามารถแก้ไขคำบรรยายแล้วลองใหม่ได้</span>
+            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+              <span>คำขอถูกปฏิเสธ (@Rejected) แก้ไขคำบรรยายด้านบน แล้วสร้าง BRIEF ใหม่โดยไม่ล้างข้อความ</span>
               <button
-                onClick={handleReset}
-                className="px-3 py-1.5 rounded-lg bg-[#0C0D1A] border border-red-500/40 text-white min-h-[36px]"
+                onClick={handleGenerateBrief}
+                disabled={!prompt.trim()}
+                className="px-3 py-2 rounded-lg bg-[#0C0D1A] border border-red-500/40 text-white min-h-[44px] disabled:opacity-40"
               >
-                ลองใหม่
+                สร้าง BRIEF ใหม่
               </button>
             </div>
           )}

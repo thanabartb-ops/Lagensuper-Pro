@@ -14,7 +14,6 @@ import {
   ShieldQuestion,
 } from 'lucide-react';
 
-/** Simulated duration of one agent step. */
 const STEP_DURATION_MS = 1500;
 
 const STEP_OUTPUTS = [
@@ -41,15 +40,6 @@ export const AgentModeView: React.FC = () => {
 
   useEffect(() => clearTimer, [clearTimer]);
 
-  /**
-   * Advances one step.
-   *
-   * The previous implementation scheduled the whole run up front with fixed
-   * setTimeout calls that bailed out when the task was paused — so pausing
-   * silently skipped those steps for good and the task could never finish.
-   * Progress is now driven step by step from task state, so pause simply stops
-   * scheduling and resume picks up exactly where it left off.
-   */
   const completeCurrentStep = useCallback(() => {
     setTask((prev) => {
       if (!prev || prev.status !== 'executing') return prev;
@@ -70,7 +60,6 @@ export const AgentModeView: React.FC = () => {
         };
       }
 
-      // Supervised runs stop here and wait for a human to approve the next step.
       if (prev.mode === 'supervised') {
         return {
           ...prev,
@@ -90,8 +79,6 @@ export const AgentModeView: React.FC = () => {
     });
   }, []);
 
-  // Only an actively executing task schedules work. Pausing stops the clock;
-  // resuming restarts it from the same step.
   useEffect(() => {
     clearTimer();
     if (!task || task.status !== 'executing') return;
@@ -122,7 +109,6 @@ export const AgentModeView: React.FC = () => {
         title: 'วิเคราะห์โครงสร้างเป้าหมาย & กำหนดตัวแปรนำเข้า',
         tool: 'ObjectiveParser',
         status: 'running',
-        output: 'แยกย่อยเป้าหมายออกเป็น 4 ข้อย่อย สำเร็จ',
       },
       {
         id: 's2',
@@ -160,15 +146,11 @@ export const AgentModeView: React.FC = () => {
     };
 
     setTask(newTask);
-
-    // Execution is advanced by the effect above, one step at a time.
   };
 
   const togglePause = () => {
     setTask((prev) => {
       if (!prev) return prev;
-      // Only a running or paused task can be toggled. A task waiting for
-      // approval is already stopped — the approval banner drives it instead.
       if (prev.status !== 'executing' && prev.status !== 'paused') return prev;
 
       const resuming = prev.status === 'paused';
@@ -193,7 +175,6 @@ export const AgentModeView: React.FC = () => {
 
   return (
     <div className="max-w-[1120px] mx-auto px-4 sm:px-6 py-6 pb-20 md:pb-10 space-y-6">
-      {/* Surface Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-[#131525] border border-[#312E81] rounded-2xl shadow-lg">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-[#7B2CFE]/10 border border-[#7B2CFE]/30 flex items-center justify-center text-[#7B2CFE]">
@@ -213,7 +194,6 @@ export const AgentModeView: React.FC = () => {
         <StatusBadge type="not_connected" text="Gateway: NOT_CONNECTED" size="sm" />
       </div>
 
-      {/* Goal Formulation Form */}
       <div className="bg-[#131525]/90 border border-[#312E81] rounded-2xl p-5 sm:p-6 space-y-4 shadow-lg">
         <label className="block text-sm font-bold text-white">
           เป้าหมายหรือภารกิจที่ต้องการมอบหมาย (Objective)
@@ -227,7 +207,6 @@ export const AgentModeView: React.FC = () => {
           className="w-full p-4 rounded-2xl bg-[#0C0D1A] border border-[#312E81] text-white text-sm focus:border-[#7B2CFE] focus:ring-1 focus:ring-[#7B2CFE] outline-none placeholder:text-white/30 transition-all resize-none disabled:opacity-60"
         />
 
-        {/* Execution Mode */}
         <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
           <div className="flex items-center gap-2">
             <span className="text-xs text-white/50">การควบคุม:</span>
@@ -269,10 +248,8 @@ export const AgentModeView: React.FC = () => {
         </div>
       </div>
 
-      {/* Execution Tracker */}
       {task && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Steps Column */}
           <div className="lg:col-span-2 bg-[#131525]/90 border border-[#312E81] rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-[#312E81] pb-3">
               <div className="flex items-center gap-2">
@@ -304,8 +281,6 @@ export const AgentModeView: React.FC = () => {
               </div>
             </div>
 
-            {/* Human-in-the-loop gate. In supervised mode the run stops here
-                until a person explicitly approves the next step. */}
             {task.status === 'awaiting_approval' && (
               <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
                 <div className="flex items-start gap-2.5">
@@ -368,7 +343,6 @@ export const AgentModeView: React.FC = () => {
             </div>
           </div>
 
-          {/* Real-time Agent Log Stream */}
           <div className="bg-[#0C0D1A] border border-[#312E81] rounded-2xl p-5 flex flex-col h-[340px] shadow-xl">
             <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#312E81]">
               <Terminal className="w-4 h-4 text-[#7B2CFE]" />

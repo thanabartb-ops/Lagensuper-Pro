@@ -14,6 +14,7 @@ import {
 export const SettingsView: React.FC = () => {
   const [workspaceName, setWorkspaceName] = useState('My LSUPERAGENT Workspace');
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
@@ -23,15 +24,18 @@ export const SettingsView: React.FC = () => {
       if (cancelled) return;
       try {
         const stored = window.localStorage.getItem('lsuperagent.v11.settings');
-        if (!stored) return;
-        const parsed = JSON.parse(stored) as {
-          workspaceName?: unknown;
-          reducedMotion?: unknown;
-        };
-        if (typeof parsed.workspaceName === 'string') setWorkspaceName(parsed.workspaceName);
-        if (typeof parsed.reducedMotion === 'boolean') setReducedMotion(parsed.reducedMotion);
+        if (stored) {
+          const parsed = JSON.parse(stored) as {
+            workspaceName?: unknown;
+            reducedMotion?: unknown;
+          };
+          if (typeof parsed.workspaceName === 'string') setWorkspaceName(parsed.workspaceName);
+          if (typeof parsed.reducedMotion === 'boolean') setReducedMotion(parsed.reducedMotion);
+        }
       } catch {
         // Keep safe defaults when storage is unavailable or malformed.
+      } finally {
+        if (!cancelled) setSettingsLoaded(true);
       }
     }, 0);
 
@@ -41,10 +45,12 @@ export const SettingsView: React.FC = () => {
     };
   }, []);
 
+  // The shell restores the persisted preference on every route. Settings only
+  // previews/updates the current choice and must not remove it on unmount.
   useEffect(() => {
+    if (!settingsLoaded) return;
     document.documentElement.classList.toggle('reduce-motion', reducedMotion);
-    return () => document.documentElement.classList.remove('reduce-motion');
-  }, [reducedMotion]);
+  }, [reducedMotion, settingsLoaded]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +59,7 @@ export const SettingsView: React.FC = () => {
         'lsuperagent.v11.settings',
         JSON.stringify({ workspaceName, reducedMotion }),
       );
+      document.documentElement.classList.toggle('reduce-motion', reducedMotion);
       setSavedSuccess(true);
       setSaveFailed(false);
     } catch {

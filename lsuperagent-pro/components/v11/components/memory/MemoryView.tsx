@@ -11,7 +11,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-/** Categories a user can pick when creating an entry by hand. */
 type NewMemoryCategory = Extract<
   MemoryEntry['category'],
   'preference' | 'project_rule' | 'context_fact'
@@ -20,7 +19,7 @@ type NewMemoryCategory = Extract<
 export const MemoryView: React.FC = () => {
   const [memories, setMemories] = useState<MemoryEntry[]>([
     {
-      id: 'mem-1',
+      id: 'sample-mem-1',
       category: 'project_rule',
       key: 'Project Tone & Voice',
       value: 'ใช้ภาษาไทยที่กระชับ สุภาพ ทันสมัย และให้เกียรติผู้ใช้งานเสมอ',
@@ -29,7 +28,7 @@ export const MemoryView: React.FC = () => {
       isSynced: false,
     },
     {
-      id: 'mem-2',
+      id: 'sample-mem-2',
       category: 'preference',
       key: 'Design Color Palette',
       value: 'เน้นชุดสี Dark Navy Black (#070812) แซมเฉดนีออน ชมพู-ม่วง-น้ำเงิน',
@@ -38,7 +37,7 @@ export const MemoryView: React.FC = () => {
       isSynced: false,
     },
     {
-      id: 'mem-3',
+      id: 'sample-mem-3',
       category: 'context_fact',
       key: 'Target Screen Constraint',
       value: 'Mobile First 393 x 852 พิกเซล และ Desktop ไม่เกิน 1200 พิกเซล',
@@ -86,7 +85,6 @@ export const MemoryView: React.FC = () => {
 
   return (
     <div className="max-w-[1120px] mx-auto px-4 sm:px-6 py-6 pb-20 md:pb-10 space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-[#131525] border border-[#312E81] rounded-2xl shadow-lg">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
@@ -112,21 +110,19 @@ export const MemoryView: React.FC = () => {
         </button>
       </div>
 
-      {/* Data Store Notice Banner */}
       <div className="p-4 rounded-2xl bg-[#131525]/90 border border-[#312E81] flex items-start sm:items-center justify-between gap-4 text-xs shadow-lg">
         <div className="flex items-center gap-3">
           <Database className="w-5 h-5 text-[#00D1FF] shrink-0" />
           <div>
             <span className="font-bold text-white block">In-Memory Store (ยังไม่บันทึกถาวร)</span>
             <span className="text-white/50">
-              ความจำเก็บใน state ของหน้าเว็บเท่านั้น หายเมื่อรีเฟรช · ระบบจัดเก็บถาวรอยู่ในแผน ยังไม่ได้เชื่อมต่อ
+              ความจำเก็บใน state ของหน้าเว็บเท่านั้น หายเมื่อรีเฟรช · รายการที่โหลดล่วงหน้าด้านล่างเป็น Sample Records จาก source code ไม่ใช่ความจำผู้ใช้หรือข้อมูลที่อ่านจาก Supabase
             </span>
           </div>
         </div>
         <StatusBadge type="not_connected" text="NOT PERSISTED" size="sm" />
       </div>
 
-      {/* Add Memory Modal/Card */}
       {showAddForm && (
         <form
           onSubmit={handleAddMemory}
@@ -187,7 +183,6 @@ export const MemoryView: React.FC = () => {
         </form>
       )}
 
-      {/* Search Bar */}
       <div className="relative">
         <Search className="w-4 h-4 text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input
@@ -199,44 +194,49 @@ export const MemoryView: React.FC = () => {
         />
       </div>
 
-      {/* Memory Items List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredMemories.map((item) => (
-          <div
-            key={item.id}
-            className="p-5 rounded-2xl bg-[#131525]/90 border border-[#312E81] hover:border-[#7B2CFE] transition-all space-y-3 relative group shadow-lg"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#FF00FF] block">
-                  {item.category.replace('_', ' ')}
-                </span>
-                <h4 className="text-sm font-bold text-white mt-0.5">{item.key}</h4>
+        {filteredMemories.map((item) => {
+          const isSeededSample = item.id.startsWith('sample-');
+          return (
+            <div
+              key={item.id}
+              className="p-5 rounded-2xl bg-[#131525]/90 border border-[#312E81] hover:border-[#7B2CFE] transition-all space-y-3 relative group shadow-lg"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#FF00FF] block">
+                    {item.category.replace('_', ' ')}
+                  </span>
+                  {isSeededSample && (
+                    <span className="inline-flex mt-1 px-2 py-0.5 rounded-md border border-amber-500/40 bg-amber-500/10 text-[10px] font-bold text-amber-200">
+                      SAMPLE · NOT USER MEMORY
+                    </span>
+                  )}
+                  <h4 className="text-sm font-bold text-white mt-0.5">{item.key}</h4>
+                </div>
+                <button
+                  onClick={() => handleDelete(item.id)}
+                  className="shrink-0 rounded-xl text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  aria-label={`ลบรายการความจำ: ${item.key}`}
+                  title="ลบรายการความจำ"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
-              {/* Always visible: a hover-only control is unreachable on touch
-                  devices, and 44x44 is the minimum comfortable touch target. */}
-              <button
-                onClick={() => handleDelete(item.id)}
-                className="shrink-0 rounded-xl text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                aria-label={`ลบรายการความจำ: ${item.key}`}
-                title="ลบรายการความจำ"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
 
-            <p className="text-xs text-white/90 leading-relaxed bg-[#0C0D1A] p-3 rounded-xl border border-[#312E81]">
-              {item.value}
-            </p>
+              <p className="text-xs text-white/90 leading-relaxed bg-[#0C0D1A] p-3 rounded-xl border border-[#312E81]">
+                {item.value}
+              </p>
 
-            <div className="flex items-center justify-between text-[10px] text-white/40 pt-1">
-              <span>อัปเดต: {item.updatedAt}</span>
-              <span className="flex items-center gap-1 text-white/60">
-                <Lock className="w-3 h-3" /> เก็บในหน่วยความจำเฉพาะอุปกรณ์
-              </span>
+              <div className="flex items-center justify-between text-[10px] text-white/40 pt-1">
+                <span>อัปเดต: {item.updatedAt}</span>
+                <span className="flex items-center gap-1 text-white/60">
+                  <Lock className="w-3 h-3" /> {isSeededSample ? 'ตัวอย่างใน source code' : 'เก็บในหน่วยความจำเฉพาะอุปกรณ์'}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

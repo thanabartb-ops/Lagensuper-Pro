@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { StatusBadge } from '../common/StatusBadge';
 import { GradientButton } from '../common/GradientButton';
 import { ResearchTask } from '../../types';
@@ -16,11 +18,6 @@ import {
 
 type ResearchDepth = 'standard' | 'deep' | 'comprehensive';
 
-/**
- * The depth selector is not cosmetic: it drives how long each pipeline stage
- * takes, how many key findings the report carries, and how many sources are
- * consulted. Previously every depth ran the identical 3.8s script.
- */
 const DEPTH_PROFILE: Record<
   ResearchDepth,
   { stageMs: number; keyFindings: number; sources: string[]; dimensions: number; indicators: number }
@@ -120,7 +117,6 @@ export const DeepResearchView: React.FC = () => {
 
     setTask(newTask);
 
-    // Simulate multi-stage research pipeline. Stage length scales with depth.
     at(1, () => {
       setTask((prev) => {
         if (!prev) return prev;
@@ -202,7 +198,6 @@ export const DeepResearchView: React.FC = () => {
 
   return (
     <div className="max-w-[1120px] mx-auto px-4 sm:px-6 py-6 pb-20 md:pb-10 space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-[#131525] border border-[#312E81] rounded-2xl shadow-lg">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-[#00D1FF]/10 border border-[#00D1FF]/30 flex items-center justify-center text-[#00D1FF]">
@@ -222,7 +217,6 @@ export const DeepResearchView: React.FC = () => {
         <StatusBadge type="not_connected" text="Gateway: NOT_CONNECTED" size="sm" />
       </div>
 
-      {/* Query Formulation Form */}
       <div className="bg-[#131525]/90 border border-[#312E81] rounded-2xl p-5 sm:p-6 space-y-4 shadow-lg">
         <label className="block text-sm font-bold text-white">
           หัวข้อที่ต้องการค้นคว้าเชิงลึก
@@ -235,15 +229,14 @@ export const DeepResearchView: React.FC = () => {
           className="w-full p-4 rounded-2xl bg-[#0C0D1A] border border-[#312E81] text-white text-sm focus:border-[#7B2CFE] focus:ring-1 focus:ring-[#7B2CFE] outline-none placeholder:text-white/30 transition-all resize-none"
         />
 
-        {/* Depth Selector */}
-        <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col items-stretch gap-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
             <span className="text-xs text-white/50">ระดับความลึก:</span>
-            <div className="inline-flex rounded-xl bg-[#0C0D1A] p-1 border border-[#312E81]">
+            <div className="grid w-full grid-cols-1 gap-1 rounded-xl bg-[#0C0D1A] p-1 border border-[#312E81] sm:w-auto sm:grid-cols-3">
               <button
                 type="button"
                 onClick={() => setDepth('standard')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                className={`w-full px-3 py-2 rounded-lg text-xs font-bold whitespace-normal transition-all ${
                   depth === 'standard'
                     ? 'bg-[#00D1FF] text-black'
                     : 'text-white/50 hover:text-white'
@@ -254,7 +247,7 @@ export const DeepResearchView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setDepth('deep')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                className={`w-full px-3 py-2 rounded-lg text-xs font-bold whitespace-normal transition-all ${
                   depth === 'deep'
                     ? 'bg-[#7B2CFE] text-white shadow-md shadow-[#7B2CFE]/40'
                     : 'text-white/50 hover:text-white'
@@ -265,7 +258,7 @@ export const DeepResearchView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setDepth('comprehensive')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                className={`w-full px-3 py-2 rounded-lg text-xs font-bold whitespace-normal transition-all ${
                   depth === 'comprehensive'
                     ? 'bg-[#FF00FF] text-white shadow-md shadow-[#FF00FF]/40'
                     : 'text-white/50 hover:text-white'
@@ -292,7 +285,6 @@ export const DeepResearchView: React.FC = () => {
         </div>
       </div>
 
-      {/* Research Execution Pipeline & Findings */}
       {task && (
         <div className="bg-[#131525]/90 border border-[#312E81] rounded-2xl p-5 sm:p-6 space-y-6 shadow-xl">
           <div className="flex items-center justify-between border-b border-[#312E81] pb-4">
@@ -307,7 +299,6 @@ export const DeepResearchView: React.FC = () => {
             />
           </div>
 
-          {/* Steps Progress */}
           <div className="space-y-3">
             {task.steps.map((step, idx) => (
               <div
@@ -353,7 +344,6 @@ export const DeepResearchView: React.FC = () => {
             ))}
           </div>
 
-          {/* Generated Report Card */}
           {task.report && (
             <div className="pt-4 border-t border-[#312E81] space-y-3 animate-in fade-in duration-300">
               <div className="flex items-center justify-between">
@@ -370,8 +360,8 @@ export const DeepResearchView: React.FC = () => {
                 </button>
               </div>
 
-              <div className="p-4 sm:p-5 rounded-2xl bg-[#0C0D1A] border border-[#312E81] text-sm text-white/90 leading-relaxed whitespace-pre-wrap font-sans">
-                {task.report}
+              <div className="v11-markdown p-4 sm:p-5 rounded-2xl bg-[#0C0D1A] border border-[#312E81] text-sm text-white/90 leading-relaxed font-sans">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.report}</ReactMarkdown>
               </div>
             </div>
           )}

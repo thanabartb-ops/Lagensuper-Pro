@@ -1,16 +1,29 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { BottomNav } from './components/common/BottomNav'
 import { Header } from './components/common/Header'
 import { pathToRoute, routeToPath } from './route-map'
 import type { AppRoute } from './types'
 
+const SETTINGS_STORAGE_KEY = 'lsuperagent.v11.settings'
+
 export function V11Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const currentRoute = pathToRoute(pathname)
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
+      const parsed = stored ? (JSON.parse(stored) as { reducedMotion?: unknown }) : null
+      document.documentElement.classList.toggle('reduce-motion', parsed?.reducedMotion === true)
+    } catch {
+      document.documentElement.classList.remove('reduce-motion')
+    }
+  }, [])
 
   const navigate = (route: AppRoute) => {
     router.push(routeToPath[route])
