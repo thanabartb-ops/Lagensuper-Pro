@@ -234,7 +234,7 @@ export const SmartChatView: React.FC = () => {
   const isStreaming = streamingStatus === 'running' || streamingStatus === 'queued';
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] max-w-[1120px] mx-auto px-2 sm:px-6 pb-16 md:pb-6">
+    <div className="mx-auto flex h-full max-w-[1120px] flex-col px-2 pb-16 sm:px-6 md:pb-6">
       {/* Surface Header */}
       <div className="py-3 px-4 mb-2 bg-[#131525] border border-[#312E81] rounded-2xl flex items-center justify-between shadow-lg">
         <div className="flex items-center gap-3">
