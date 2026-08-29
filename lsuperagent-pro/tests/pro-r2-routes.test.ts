@@ -13,7 +13,6 @@ const modulePages = [
 ] as const
 
 const prohibitedServerRoutes = [
-  'app/api/chat/route.ts',
   'app/api/execute/route.ts',
   'app/api/memory/route.ts',
   'app/api/memory/candidate/route.ts',
@@ -28,14 +27,15 @@ describe('PRO-R2 route and authority boundary', () => {
     }
   })
 
-  it('keeps /api/health as the only implemented PRO-R2 server route', () => {
+  it('allows only health and the canonical authenticated chat server route', () => {
     expect(existsSync(resolve(process.cwd(), 'app/api/health/route.ts'))).toBe(true)
+    expect(existsSync(resolve(process.cwd(), 'app/api/chat/route.ts'))).toBe(true)
     for (const route of prohibitedServerRoutes) {
       expect(existsSync(resolve(process.cwd(), route))).toBe(false)
     }
   })
 
-  it('does not introduce privileged secret names in app or lib source', () => {
+  it('does not introduce privileged provider secret names in app or lib source', () => {
     const forbidden = [
       'SUPABASE_' + 'SERVICE_ROLE_KEY',
       'OPENAI_' + 'API_KEY',
@@ -47,8 +47,10 @@ describe('PRO-R2 route and authority boundary', () => {
 
     const sources = [
       'app/page.tsx',
+      'app/api/chat/route.ts',
       'lib/gateway/client.ts',
       'lib/gateway/types.ts',
+      'lib/gateway/server-dispatch.ts',
     ]
       .map((path) => readFileSync(resolve(process.cwd(), path), 'utf8'))
       .join('\n')
