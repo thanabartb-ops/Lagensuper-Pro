@@ -21,7 +21,10 @@ export function V11Landing() {
     document.getElementById('dashboard')?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  // Carry the typed prompt across the route change instead of dropping it.
+  const handleLogin = () => {
+    router.push('/login?next=/chat')
+  }
+
   const handleSearchSubmit = (query: string) => {
     setPendingPrompt(query)
     navigate('smart_chat')
@@ -36,7 +39,7 @@ export function V11Landing() {
 
   return (
     <div className="w-full space-y-4">
-      <HeroSection onStartClick={handleStart} />
+      <HeroSection onStartClick={handleStart} onLoginClick={handleLogin} />
       <DashboardSection onRouteChange={navigate} onSearchSubmit={handleSearchSubmit} />
       <ServicesSection
         selectedToolId={selectedToolId}
