@@ -10,11 +10,26 @@ import {
 } from '../components/v11/services/runtimeAdapter'
 import { peekPendingPrompt } from '../components/v11/services/promptHandoff'
 
-const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }))
+const { pushMock, routerMock, clearSessionMock } = vi.hoisted(() => {
+  const pushMock = vi.fn()
+  return {
+    pushMock,
+    routerMock: { push: pushMock, replace: pushMock },
+    clearSessionMock: vi.fn(),
+  }
+})
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => routerMock,
 }))
+
+vi.mock('../components/v11/services/browserAuth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../components/v11/services/browserAuth')>()
+  return {
+    ...actual,
+    clearBrowserSession: clearSessionMock,
+  }
+})
 
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
@@ -24,6 +39,7 @@ afterEach(() => {
   cleanup()
   window.sessionStorage.clear()
   pushMock.mockReset()
+  clearSessionMock.mockReset()
   vi.restoreAllMocks()
 })
 
@@ -107,6 +123,28 @@ describe('V11 two chat entrypoints', () => {
       () => expect(screen.getByText('คำตอบจริงจาก runtime')).toBeInTheDocument(),
       { timeout: 1500 },
     )
+  })
+
+  it('preserves an unsatisfied prompt and returns to login when auth expires', async () => {
+    const execute = vi
+      .spyOn(defaultRuntimeAdapter, 'executePrompt')
+      .mockResolvedValue({ status: 'UNAUTHENTICATED', message: 'ไม่ควรถูกแสดงเป็นคำตอบ' })
+
+    render(<SmartChatView />)
+
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'คำถามที่ยังไม่สำเร็จ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'ส่งข้อความ' }))
+
+    await waitFor(() => {
+      expect(execute).toHaveBeenCalledWith('คำถามที่ยังไม่สำเร็จ', 'smart_chat')
+    })
+    await waitFor(() => {
+      expect(clearSessionMock).toHaveBeenCalledTimes(1)
+      expect(pushMock).toHaveBeenCalledWith('/login?next=/chat')
+      expect(peekPendingPrompt()).toBe('คำถามที่ยังไม่สำเร็จ')
+    })
+    expect(screen.queryByText('ไม่ควรถูกแสดงเป็นคำตอบ')).not.toBeInTheDocument()
   })
 
   it('hands the landing composer prompt to /chat with a compact send control', () => {
