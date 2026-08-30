@@ -52,11 +52,11 @@ export function getBrowserAuthClient(): AuthClientLike | null {
 }
 
 /**
- * This milestone has one protected destination only. Returning the constant
- * deliberately rejects absolute, protocol-relative, and unsupported paths.
+ * This milestone has one protected destination only. Absolute,
+ * protocol-relative, and unsupported paths all fail closed to /chat.
  */
-export function sanitizeAuthNext(_value: string | null): '/chat' {
-  return '/chat'
+export function sanitizeAuthNext(value: string | null): '/chat' {
+  return value === '/chat' ? value : '/chat'
 }
 
 export async function getCurrentSession(
