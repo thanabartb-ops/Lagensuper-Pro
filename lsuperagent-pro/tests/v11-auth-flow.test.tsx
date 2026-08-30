@@ -6,16 +6,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoginView } from '../components/v11/components/auth/LoginView'
 import { RequireAuth } from '../components/v11/components/auth/RequireAuth'
 
-const { pushMock, signInMock, getSessionMock, subscribeMock, protectedMountMock } = vi.hoisted(() => ({
-  pushMock: vi.fn(),
-  signInMock: vi.fn(),
-  getSessionMock: vi.fn(),
-  subscribeMock: vi.fn(),
-  protectedMountMock: vi.fn(),
-}))
+const {
+  pushMock,
+  routerMock,
+  signInMock,
+  getSessionMock,
+  subscribeMock,
+  protectedMountMock,
+} = vi.hoisted(() => {
+  const pushMock = vi.fn()
+  return {
+    pushMock,
+    routerMock: { push: pushMock, replace: pushMock },
+    signInMock: vi.fn(),
+    getSessionMock: vi.fn(),
+    subscribeMock: vi.fn(),
+    protectedMountMock: vi.fn(),
+  }
+})
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: pushMock, replace: pushMock }),
+  useRouter: () => routerMock,
   useSearchParams: () => new URLSearchParams('next=/chat'),
 }))
 
