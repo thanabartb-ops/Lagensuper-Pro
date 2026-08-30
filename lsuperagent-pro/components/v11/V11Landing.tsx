@@ -25,6 +25,10 @@ export function V11Landing() {
     router.push('/login?next=/chat')
   }
 
+  const handleSignup = () => {
+    router.push('/login?next=/chat&mode=signup')
+  }
+
   const handleSearchSubmit = (query: string) => {
     setPendingPrompt(query)
     navigate('smart_chat')
@@ -39,7 +43,11 @@ export function V11Landing() {
 
   return (
     <div className="w-full space-y-4">
-      <HeroSection onStartClick={handleStart} onLoginClick={handleLogin} />
+      <HeroSection
+        onStartClick={handleStart}
+        onLoginClick={handleLogin}
+        onSignupClick={handleSignup}
+      />
       <DashboardSection onRouteChange={navigate} onSearchSubmit={handleSearchSubmit} />
       <ServicesSection
         selectedToolId={selectedToolId}
