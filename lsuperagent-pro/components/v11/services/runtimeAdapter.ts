@@ -1,5 +1,5 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { RuntimeGatewayStatus } from '../types';
+import { getCurrentSession } from './browserAuth';
 
 export interface RuntimeAdapter {
   name: string;
@@ -20,46 +20,21 @@ type ChatSenderResult =
 
 type ChatSender = (message: string) => Promise<ChatSenderResult>;
 
-let browserSupabase: SupabaseClient | null = null;
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && !Array.isArray(value) && typeof value === 'object';
 }
 
-function getBrowserSupabase(): SupabaseClient | null {
-  if (typeof window === 'undefined') return null;
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? '';
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ?? '';
-  if (!url || !publishableKey) return null;
-
-  if (!browserSupabase) {
-    browserSupabase = createClient(url, publishableKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      },
-    });
-  }
-
-  return browserSupabase;
-}
-
 async function sendAuthenticatedChat(message: string): Promise<ChatSenderResult> {
-  const client = getBrowserSupabase();
-  if (!client) return { status: 'unauthenticated' };
+  const session = await getCurrentSession();
+  if (session.status === 'unauthenticated') return { status: 'unauthenticated' };
+  if (session.status === 'unavailable') return { status: 'failed', code: 'AUTH_UNAVAILABLE' };
 
   try {
-    const { data, error } = await client.auth.getSession();
-    const accessToken = data.session?.access_token ?? '';
-    if (error || !accessToken) return { status: 'unauthenticated' };
-
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${accessToken}`,
+        authorization: `Bearer ${session.accessToken}`,
       },
       body: JSON.stringify({ message }),
     });
@@ -187,7 +162,7 @@ export class GatewayRuntimeAdapter implements RuntimeAdapter {
       };
       return {
         status: 'UNAUTHENTICATED',
-        message: 'กรุณาเข้าสู่ระบบด้วย Supabase ก่อนใช้งาน Smart Chat แบบ Live',
+        message: 'กรุณาเข้าสู่ระบบก่อนใช้งานแชท',
       };
     }
 
@@ -198,12 +173,12 @@ export class GatewayRuntimeAdapter implements RuntimeAdapter {
         statusText: 'DEGRADED',
         apiLatencyMs,
         activeProvider: 'Runtime unavailable',
-        supabaseAuth: 'READY',
+        supabaseAuth: result.code === 'AUTH_UNAVAILABLE' ? 'DISCONNECTED' : 'READY',
         lastChecked: new Date().toISOString(),
       };
       return {
         status: result.code,
-        message: `Smart Chat ไม่สามารถยืนยันคำตอบจาก runtime ได้ (${result.code})`,
+        message: `ไม่สามารถยืนยันคำตอบจาก runtime ได้ (${result.code})`,
       };
     }
 
@@ -220,7 +195,7 @@ export class GatewayRuntimeAdapter implements RuntimeAdapter {
       };
       return {
         status: 'INVALID_RESPONSE',
-        message: 'Smart Chat ได้รับ response ที่ตรวจสอบแล้ว แต่ไม่มีข้อความที่แสดงผลได้',
+        message: 'ได้รับ response ที่ตรวจสอบแล้ว แต่ไม่มีข้อความที่แสดงผลได้',
       };
     }
 
