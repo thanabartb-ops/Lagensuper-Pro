@@ -53,6 +53,62 @@ describe('browser auth service', () => {
     })
   })
 
+  it('creates a signup session through the shared browser auth client', async () => {
+    const module = await import('../components/v11/services/browserAuth')
+    const signUp = (
+      module as typeof module & {
+        signUpWithPassword?: (
+          email: string,
+          password: string,
+          client: AuthClientLike,
+        ) => Promise<{ status: string }>
+      }
+    ).signUpWithPassword
+
+    expect(signUp).toBeTypeOf('function')
+    if (!signUp) return
+
+    const signUpRequest = vi.fn().mockResolvedValue({
+      data: { session: { access_token: 'new-user-token' }, user: { id: 'user-1' } },
+      error: null,
+    })
+    const client = { auth: { signUp: signUpRequest } } as unknown as AuthClientLike
+
+    await expect(signUp('new@example.com', 'secret', client)).resolves.toEqual({
+      status: 'authenticated',
+    })
+    expect(signUpRequest).toHaveBeenCalledWith({ email: 'new@example.com', password: 'secret' })
+  })
+
+  it('reports confirmation required when signup creates a user without a session', async () => {
+    const module = await import('../components/v11/services/browserAuth')
+    const signUp = (
+      module as typeof module & {
+        signUpWithPassword?: (
+          email: string,
+          password: string,
+          client: AuthClientLike,
+        ) => Promise<{ status: string }>
+      }
+    ).signUpWithPassword
+
+    expect(signUp).toBeTypeOf('function')
+    if (!signUp) return
+
+    const client = {
+      auth: {
+        signUp: vi.fn().mockResolvedValue({
+          data: { session: null, user: { id: 'user-1' } },
+          error: null,
+        }),
+      },
+    } as unknown as AuthClientLike
+
+    await expect(signUp('new@example.com', 'secret', client)).resolves.toEqual({
+      status: 'confirmation_required',
+    })
+  })
+
   it('returns unavailable when auth cannot be reached', async () => {
     const client = authClient({
       getSession: vi.fn().mockRejectedValue(new Error('network down')),
