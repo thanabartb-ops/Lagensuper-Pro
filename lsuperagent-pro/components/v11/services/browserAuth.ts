@@ -4,6 +4,7 @@ export type AuthClientLike = {
   auth: {
     getSession?: () => Promise<unknown>
     signInWithPassword?: (credentials: { email: string; password: string }) => Promise<unknown>
+    signUp?: (credentials: { email: string; password: string }) => Promise<unknown>
     signOut?: () => Promise<unknown>
     onAuthStateChange?: (
       callback: (_event: string, session: unknown) => void,
@@ -19,6 +20,12 @@ export type BrowserSession =
 export type SignInResult =
   | { status: 'authenticated' }
   | { status: 'invalid_credentials' }
+  | { status: 'unavailable' }
+
+export type SignUpResult =
+  | { status: 'authenticated' }
+  | { status: 'confirmation_required' }
+  | { status: 'invalid_signup' }
   | { status: 'unavailable' }
 
 let browserClient: AuthClientLike | null = null
@@ -95,6 +102,12 @@ function isInvalidCredentialError(error: unknown): boolean {
   )
 }
 
+function isClientAuthError(error: unknown): boolean {
+  if (!isRecord(error)) return false
+  const status = typeof error.status === 'number' ? error.status : null
+  return status !== null && status >= 400 && status < 500
+}
+
 export async function signInWithPassword(
   email: string,
   password: string,
@@ -126,6 +139,45 @@ export async function signInWithPassword(
     if (!hasAccessToken(session)) return { status: 'invalid_credentials' }
 
     return { status: 'authenticated' }
+  } catch {
+    return { status: 'unavailable' }
+  }
+}
+
+export async function signUpWithPassword(
+  email: string,
+  password: string,
+  client: AuthClientLike | null = getBrowserAuthClient(),
+): Promise<SignUpResult> {
+  const normalizedEmail = email.trim()
+  if (!normalizedEmail || !password) return { status: 'invalid_signup' }
+  if (!client?.auth.signUp) return { status: 'unavailable' }
+
+  try {
+    const result = await client.auth.signUp({
+      email: normalizedEmail,
+      password,
+    })
+
+    if (!isRecord(result) || !isRecord(result.data)) {
+      return { status: 'unavailable' }
+    }
+
+    if (result.error) {
+      return {
+        status: isClientAuthError(result.error) ? 'invalid_signup' : 'unavailable',
+      }
+    }
+
+    if (hasAccessToken(result.data.session)) {
+      return { status: 'authenticated' }
+    }
+
+    if (result.data.user) {
+      return { status: 'confirmation_required' }
+    }
+
+    return { status: 'unavailable' }
   } catch {
     return { status: 'unavailable' }
   }
