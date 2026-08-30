@@ -54,9 +54,9 @@ describe('browser auth service', () => {
   })
 
   it('creates a signup session through the shared browser auth client', async () => {
-    const module = await import('../components/v11/services/browserAuth')
+    const authModule = await import('../components/v11/services/browserAuth')
     const signUp = (
-      module as typeof module & {
+      authModule as typeof authModule & {
         signUpWithPassword?: (
           email: string,
           password: string,
@@ -81,9 +81,9 @@ describe('browser auth service', () => {
   })
 
   it('reports confirmation required when signup creates a user without a session', async () => {
-    const module = await import('../components/v11/services/browserAuth')
+    const authModule = await import('../components/v11/services/browserAuth')
     const signUp = (
-      module as typeof module & {
+      authModule as typeof authModule & {
         signUpWithPassword?: (
           email: string,
           password: string,
