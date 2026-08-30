@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatMessage, StreamingStatus } from '../../types';
+import { clearBrowserSession } from '../../services/browserAuth';
 import { defaultRuntimeAdapter } from '../../services/runtimeAdapter';
-import { clearPendingPrompt, peekPendingPrompt } from '../../services/promptHandoff';
+import { clearPendingPrompt, peekPendingPrompt, setPendingPrompt } from '../../services/promptHandoff';
 import {
   Send,
   Sparkles,
@@ -19,6 +21,7 @@ import {
 } from 'lucide-react';
 
 export const SmartChatView: React.FC = () => {
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-1',
@@ -128,6 +131,16 @@ export const SmartChatView: React.FC = () => {
         const result = await defaultRuntimeAdapter.executePrompt(text, 'smart_chat');
         if (controller.signal.aborted) return;
 
+        if (result.status === 'UNAUTHENTICATED') {
+          abortRef.current = null;
+          setPendingPrompt(text);
+          setMessages((prev) => prev.filter((message) => message.id !== botMsgId));
+          setStreamingStatus('idle');
+          await clearBrowserSession();
+          router.replace('/login?next=/chat');
+          return;
+        }
+
         const fullResponse = result.message;
         let currentLength = 0;
 
@@ -170,7 +183,7 @@ export const SmartChatView: React.FC = () => {
         scheduleStatusReset(800);
       }
     },
-    [inputValue, streamingStatus, clearStatusReset, scheduleStatusReset]
+    [inputValue, streamingStatus, clearStatusReset, scheduleStatusReset, router]
   );
 
   const handleStopStreaming = useCallback(() => {
