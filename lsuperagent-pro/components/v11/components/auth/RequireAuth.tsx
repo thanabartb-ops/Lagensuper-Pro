@@ -14,24 +14,26 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true
+    let invalidated = false
 
     const redirectToLogin = () => {
       if (!active) return
+      invalidated = true
       setState('redirecting')
       router.replace(LOGIN_PATH)
     }
 
     const dispose = subscribeToAuthChanges((authenticated) => {
       if (!active) return
-      if (authenticated) {
+      if (authenticated && !invalidated) {
         setState('authenticated')
-      } else {
+      } else if (!authenticated) {
         redirectToLogin()
       }
     })
 
     void getCurrentSession().then((session) => {
-      if (!active) return
+      if (!active || invalidated) return
       if (session.status === 'authenticated') {
         setState('authenticated')
       } else {
