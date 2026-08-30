@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoginView } from '../components/v11/components/auth/LoginView'
 import { RequireAuth } from '../components/v11/components/auth/RequireAuth'
+import { V11Landing } from '../components/v11/V11Landing'
 
 const {
   pushMock,
@@ -121,6 +122,18 @@ describe('V11 email/password login', () => {
 
     resolve({ status: 'authenticated' })
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/chat'))
+  })
+})
+
+describe('V11 landing auth entry', () => {
+  it('offers a real login action that returns to Chat after authentication', () => {
+    render(<V11Landing />)
+
+    const loginButton = screen.getByRole('button', { name: 'เข้าสู่ระบบ' })
+    expect(loginButton).toBeEnabled()
+    fireEvent.click(loginButton)
+
+    expect(pushMock).toHaveBeenCalledWith('/login?next=/chat')
   })
 })
 
