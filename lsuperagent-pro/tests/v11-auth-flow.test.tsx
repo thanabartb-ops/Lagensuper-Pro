@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { useEffect } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoginView } from '../components/v11/components/auth/LoginView'
+import { RequireAuth } from '../components/v11/components/auth/RequireAuth'
 
-const { pushMock, signInMock } = vi.hoisted(() => ({
+const { pushMock, signInMock, getSessionMock, subscribeMock, protectedMountMock } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   signInMock: vi.fn(),
+  getSessionMock: vi.fn(),
+  subscribeMock: vi.fn(),
+  protectedMountMock: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -16,13 +21,25 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('../components/v11/services/browserAuth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/v11/services/browserAuth')>()
-  return { ...actual, signInWithPassword: signInMock }
+  return {
+    ...actual,
+    signInWithPassword: signInMock,
+    getCurrentSession: getSessionMock,
+    subscribeToAuthChanges: subscribeMock,
+  }
+})
+
+beforeEach(() => {
+  subscribeMock.mockReturnValue(() => undefined)
 })
 
 afterEach(() => {
   cleanup()
   pushMock.mockReset()
   signInMock.mockReset()
+  getSessionMock.mockReset()
+  subscribeMock.mockReset()
+  protectedMountMock.mockReset()
 })
 
 function fillLoginForm() {
@@ -32,6 +49,13 @@ function fillLoginForm() {
   fireEvent.change(screen.getByLabelText('รหัสผ่าน'), {
     target: { value: 'secret' },
   })
+}
+
+function ProtectedProbe() {
+  useEffect(() => {
+    protectedMountMock()
+  }, [])
+  return <div>protected-chat</div>
 }
 
 describe('V11 email/password login', () => {
@@ -86,5 +110,57 @@ describe('V11 email/password login', () => {
 
     resolve({ status: 'authenticated' })
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/chat'))
+  })
+})
+
+describe('V11 chat auth gate', () => {
+  it('redirects unauthenticated users before protected Chat mounts', async () => {
+    getSessionMock.mockResolvedValue({ status: 'unauthenticated' })
+
+    render(
+      <RequireAuth>
+        <ProtectedProbe />
+      </RequireAuth>,
+    )
+
+    expect(screen.queryByText('protected-chat')).not.toBeInTheDocument()
+    expect(protectedMountMock).not.toHaveBeenCalled()
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/login?next=/chat'))
+    expect(protectedMountMock).not.toHaveBeenCalled()
+  })
+
+  it('renders protected Chat only after a valid session is confirmed', async () => {
+    getSessionMock.mockResolvedValue({ status: 'authenticated', accessToken: 'token' })
+
+    render(
+      <RequireAuth>
+        <ProtectedProbe />
+      </RequireAuth>,
+    )
+
+    expect(await screen.findByText('protected-chat')).toBeInTheDocument()
+    expect(protectedMountMock).toHaveBeenCalledTimes(1)
+    expect(pushMock).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when an authenticated session disappears', async () => {
+    let authListener: ((authenticated: boolean) => void) | undefined
+    getSessionMock.mockResolvedValue({ status: 'authenticated', accessToken: 'token' })
+    subscribeMock.mockImplementation((listener: (authenticated: boolean) => void) => {
+      authListener = listener
+      return () => undefined
+    })
+
+    render(
+      <RequireAuth>
+        <ProtectedProbe />
+      </RequireAuth>,
+    )
+    expect(await screen.findByText('protected-chat')).toBeInTheDocument()
+
+    act(() => authListener?.(false))
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/login?next=/chat'))
+    expect(screen.queryByText('protected-chat')).not.toBeInTheDocument()
   })
 })
