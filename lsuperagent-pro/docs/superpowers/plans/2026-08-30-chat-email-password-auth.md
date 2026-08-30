@@ -45,7 +45,7 @@
 - `components/v11/components/landing/HeroSection.tsx` — replace disabled preview login text with active `เข้าสู่ระบบ` action.
 - `components/v11/services/runtimeAdapter.ts` — remove its private Supabase client and obtain the token through `browserAuth.ts`.
 - `components/v11/components/chat/SmartChatView.tsx` — on `UNAUTHENTICATED`, preserve the exact unsatisfied prompt, clear stale auth, and return to login without rendering an assistant success.
-- `tests/v11-live-smart-chat.test.tsx` — update only assertions affected by the auth boundary and add 401/prompt-preservation regression coverage if that behavior is clearer here than in `v11-auth-flow.test.tsx`.
+- `tests/v11-live-smart-chat.test.tsx` — retain existing Chat behavior and add only the auth-expiry regression that belongs to Chat rendering.
 
 No package dependency changes are expected.
 
@@ -83,27 +83,31 @@ Read the App Router/client navigation guide that applies to `useRouter()` and cl
 
 - [ ] **Step 2: Write failing auth-service tests**
 
-Start `tests/v11-auth-flow.test.tsx` with jsdom and these concrete behaviors:
+Create `tests/v11-auth-flow.test.tsx`:
 
 ```tsx
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
+import { cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getCurrentSession,
-  signInWithPassword,
   sanitizeAuthNext,
+  signInWithPassword,
   type AuthClientLike,
 } from '../components/v11/services/browserAuth'
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 function authClient(overrides: Partial<AuthClientLike['auth']>): AuthClientLike {
   return { auth: overrides as AuthClientLike['auth'] }
 }
 
 describe('browser auth service', () => {
-  it('returns the current access token for an authenticated session', async () => {
+  it('returns an authenticated session with its access token', async () => {
     const client = authClient({
       getSession: vi.fn().mockResolvedValue({
         data: { session: { access_token: 'user-token' } },
@@ -117,7 +121,7 @@ describe('browser auth service', () => {
     })
   })
 
-  it('normalizes invalid credentials without exposing a raw Supabase error', async () => {
+  it('normalizes invalid credentials without exposing raw Supabase text', async () => {
     const client = authClient({
       signInWithPassword: vi.fn().mockResolvedValue({
         data: { session: null, user: null },
@@ -142,17 +146,15 @@ describe('browser auth service', () => {
 
 - [ ] **Step 3: Run the focused test and confirm RED**
 
-Run:
-
 ```bash
 pnpm vitest run tests/v11-auth-flow.test.tsx
 ```
 
-Expected: FAIL because `components/v11/services/browserAuth.ts` and its exports do not exist yet.
+Expected: FAIL because `components/v11/services/browserAuth.ts` does not exist.
 
 - [ ] **Step 4: Implement the minimal browser auth service**
 
-Create `components/v11/services/browserAuth.ts` with this structure:
+Create `components/v11/services/browserAuth.ts` with these exact public types and helpers:
 
 ```ts
 import { createClient } from '@supabase/supabase-js'
@@ -202,14 +204,10 @@ export function getBrowserAuthClient(): AuthClientLike | null {
   return browserClient
 }
 
-export function sanitizeAuthNext(value: string | null): '/chat' {
-  return value === '/chat' ? '/chat' : '/chat'
+export function sanitizeAuthNext(_value: string | null): '/chat' {
+  return '/chat'
 }
-```
 
-Then implement `getCurrentSession`, `signInWithPassword`, `clearBrowserSession`, and `subscribeToAuthChanges` using record-shape checks rather than trusting `unknown` results. Required behavior:
-
-```ts
 export async function getCurrentSession(
   client: AuthClientLike | null = getBrowserAuthClient(),
 ): Promise<BrowserSession> {
@@ -230,20 +228,58 @@ export async function getCurrentSession(
 }
 ```
 
-For `signInWithPassword`:
-- trim email;
-- empty email/password -> `invalid_credentials`;
-- missing client/method or thrown exception -> `unavailable`;
-- a response with an error or without both a session and access token -> `invalid_credentials`;
-- success -> `authenticated`.
+Implement the remaining functions with the following exact behavior:
 
-For `clearBrowserSession`, call `signOut()` if present and swallow failure because the desired local outcome is still fail-closed.
+```ts
+export async function signInWithPassword(
+  email: string,
+  password: string,
+  client: AuthClientLike | null = getBrowserAuthClient(),
+): Promise<SignInResult> {
+  const normalizedEmail = email.trim()
+  if (!normalizedEmail || !password) return { status: 'invalid_credentials' }
+  if (!client?.auth.signInWithPassword) return { status: 'unavailable' }
 
-For `subscribeToAuthChanges`, return a no-op disposer if the client/method is unavailable; otherwise call `onAuthStateChange`, treat a session containing a non-empty `access_token` as authenticated, and return `subscription.unsubscribe`.
+  try {
+    const result = await client.auth.signInWithPassword({ email: normalizedEmail, password })
+    if (!isRecord(result) || result.error || !isRecord(result.data)) {
+      return { status: 'invalid_credentials' }
+    }
+    const session = result.data.session
+    if (!isRecord(session) || typeof session.access_token !== 'string' || !session.access_token) {
+      return { status: 'invalid_credentials' }
+    }
+    return { status: 'authenticated' }
+  } catch {
+    return { status: 'unavailable' }
+  }
+}
+
+export async function clearBrowserSession(
+  client: AuthClientLike | null = getBrowserAuthClient(),
+): Promise<void> {
+  try {
+    await client?.auth.signOut?.()
+  } catch {
+    // Fail closed: local sign-out cleanup is best effort.
+  }
+}
+
+export function subscribeToAuthChanges(
+  listener: (authenticated: boolean) => void,
+  client: AuthClientLike | null = getBrowserAuthClient(),
+): () => void {
+  if (!client?.auth.onAuthStateChange) return () => undefined
+  const { data } = client.auth.onAuthStateChange((_event, session) => {
+    const authenticated =
+      isRecord(session) && typeof session.access_token === 'string' && session.access_token.length > 0
+    listener(authenticated)
+  })
+  return () => data.subscription.unsubscribe()
+}
+```
 
 - [ ] **Step 5: Run focused tests and confirm GREEN**
-
-Run:
 
 ```bash
 pnpm vitest run tests/v11-auth-flow.test.tsx
@@ -273,56 +309,77 @@ git commit -m "feat: add shared browser auth service"
 
 - [ ] **Step 1: Add failing LoginView tests**
 
-Append tests using a hoisted `pushMock` and mocked `next/navigation`:
+At the top of `tests/v11-auth-flow.test.tsx`, add:
 
 ```tsx
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { LoginView } from '../components/v11/components/auth/LoginView'
 
-const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }))
+const { pushMock, signInMock } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  signInMock: vi.fn(),
+}))
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock, replace: pushMock }),
   useSearchParams: () => new URLSearchParams('next=/chat'),
 }))
 
-afterEach(() => {
-  cleanup()
-  pushMock.mockReset()
-  vi.restoreAllMocks()
+vi.mock('../components/v11/services/browserAuth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../components/v11/services/browserAuth')>()
+  return { ...actual, signInWithPassword: signInMock }
 })
-```
 
-Mock `signInWithPassword` at module level and test:
-
-```tsx
-it('logs in with email/password and returns only to /chat', async () => {
-  signInMock.mockResolvedValue({ status: 'authenticated' })
-  render(<LoginView />)
-
+function fillLoginForm() {
   fireEvent.change(screen.getByLabelText('อีเมล'), { target: { value: 'me@example.com' } })
   fireEvent.change(screen.getByLabelText('รหัสผ่าน'), { target: { value: 'secret' } })
-  fireEvent.click(screen.getByRole('button', { name: 'เข้าสู่ระบบ' }))
+}
+```
 
+Add these tests:
+
+```tsx
+it('logs in with email/password and returns to /chat', async () => {
+  signInMock.mockResolvedValue({ status: 'authenticated' })
+  render(<LoginView />)
+  fillLoginForm()
+  fireEvent.click(screen.getByRole('button', { name: 'เข้าสู่ระบบ' }))
   await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/chat'))
 })
 
 it('shows a safe Thai message for invalid credentials', async () => {
   signInMock.mockResolvedValue({ status: 'invalid_credentials' })
   render(<LoginView />)
-  // fill both fields and submit
-  await screen.findByText('อีเมลหรือรหัสผ่านไม่ถูกต้อง')
+  fillLoginForm()
+  fireEvent.click(screen.getByRole('button', { name: 'เข้าสู่ระบบ' }))
+  expect(await screen.findByText('อีเมลหรือรหัสผ่านไม่ถูกต้อง')).toBeInTheDocument()
   expect(pushMock).not.toHaveBeenCalled()
 })
 
 it('shows service unavailable without raw provider text', async () => {
   signInMock.mockResolvedValue({ status: 'unavailable' })
   render(<LoginView />)
-  // fill both fields and submit
-  await screen.findByText('ระบบเข้าสู่ระบบยังไม่พร้อม กรุณาลองใหม่อีกครั้ง')
+  fillLoginForm()
+  fireEvent.click(screen.getByRole('button', { name: 'เข้าสู่ระบบ' }))
+  expect(
+    await screen.findByText('ระบบเข้าสู่ระบบยังไม่พร้อม กรุณาลองใหม่อีกครั้ง'),
+  ).toBeInTheDocument()
+})
+
+it('blocks duplicate submit while sign-in is pending', async () => {
+  let resolve!: (value: { status: 'authenticated' }) => void
+  signInMock.mockReturnValue(new Promise((r) => { resolve = r }))
+  render(<LoginView />)
+  fillLoginForm()
+  const button = screen.getByRole('button', { name: 'เข้าสู่ระบบ' })
+  fireEvent.click(button)
+  fireEvent.click(button)
+  expect(signInMock).toHaveBeenCalledTimes(1)
+  expect(button).toBeDisabled()
+  resolve({ status: 'authenticated' })
+  await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/chat'))
 })
 ```
-
-Add one deferred-promise test that clicks submit twice while sign-in is pending and expects one call plus a disabled submit button.
 
 - [ ] **Step 2: Run focused test and confirm RED**
 
@@ -330,18 +387,18 @@ Add one deferred-promise test that clicks submit twice while sign-in is pending 
 pnpm vitest run tests/v11-auth-flow.test.tsx
 ```
 
-Expected: FAIL because `LoginView` and route do not exist.
+Expected: FAIL because `LoginView` and `/login` do not exist.
 
 - [ ] **Step 3: Implement LoginView**
 
-Create `components/v11/components/auth/LoginView.tsx` as a client component. Use these exact user-facing strings:
+Create `components/v11/components/auth/LoginView.tsx`:
 
 ```tsx
 'use client'
 
 import { FormEvent, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { signInWithPassword, sanitizeAuthNext } from '../../services/browserAuth'
+import { sanitizeAuthNext, signInWithPassword } from '../../services/browserAuth'
 
 export function LoginView() {
   const router = useRouter()
@@ -371,23 +428,57 @@ export function LoginView() {
     setSubmitting(false)
   }
 
-  // render minimal single-column form
+  return (
+    <main className="mx-auto flex min-h-[70vh] w-full max-w-md items-center px-4 py-10">
+      <section className="w-full rounded-2xl border border-[#312E81] bg-[#131525] p-5 sm:p-7">
+        <p className="mb-2 text-sm font-bold tracking-wide text-white/70">LSUPERAGENT</p>
+        <h1 className="mb-6 text-2xl font-bold text-white">เข้าสู่ระบบ</h1>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="login-email" className="mb-1.5 block text-sm text-white/70">อีเมล</label>
+            <input
+              id="login-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="min-h-[44px] w-full rounded-xl border border-[#312E81] bg-[#0C0D1A] px-3 text-white outline-none focus:border-[#7B2CFE]"
+            />
+          </div>
+          <div>
+            <label htmlFor="login-password" className="mb-1.5 block text-sm text-white/70">รหัสผ่าน</label>
+            <input
+              id="login-password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="min-h-[44px] w-full rounded-xl border border-[#312E81] bg-[#0C0D1A] px-3 text-white outline-none focus:border-[#7B2CFE]"
+            />
+          </div>
+          {errorText ? <p role="alert" className="text-sm text-red-300">{errorText}</p> : null}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="min-h-[44px] w-full rounded-xl bg-gradient-to-r from-[#FF00FF] to-[#7B2CFE] font-bold text-white disabled:opacity-50"
+          >
+            เข้าสู่ระบบ
+          </button>
+        </form>
+        <button
+          type="button"
+          onClick={() => router.push('/')}
+          className="mt-4 min-h-[44px] w-full text-sm text-white/60 hover:text-white"
+        >
+          กลับหน้าหลัก
+        </button>
+      </section>
+    </main>
+  )
 }
 ```
 
-Render requirements:
-- visible `LSUPERAGENT` brand;
-- heading `เข้าสู่ระบบ`;
-- `<label htmlFor="login-email">อีเมล</label>` + `type="email"`, `autoComplete="email"`;
-- `<label htmlFor="login-password">รหัสผ่าน</label>` + `type="password"`, `autoComplete="current-password"`;
-- submit button text `เข้าสู่ระบบ`, minimum 44px height, disabled while submitting;
-- error container `role="alert"` when `errorText` exists;
-- back action `กลับหน้าหลัก` calling `router.push('/')`;
-- no sign-up, forgot-password, OAuth, or guest controls.
-
-Use existing Elegant Dark visual language only; do not introduce a new design system.
-
-- [ ] **Step 4: Add thin `/login` route**
+- [ ] **Step 4: Add the `/login` route**
 
 Create `app/login/page.tsx`:
 
@@ -399,13 +490,13 @@ export default function LoginPage() {
 }
 ```
 
-- [ ] **Step 5: Run focused tests**
+- [ ] **Step 5: Run focused tests and confirm GREEN**
 
 ```bash
 pnpm vitest run tests/v11-auth-flow.test.tsx
 ```
 
-Expected: Login tests PASS.
+Expected: all Login tests PASS.
 
 - [ ] **Step 6: Commit Task 2**
 
@@ -427,13 +518,14 @@ git commit -m "feat: add email password login page"
 - Consumes: `getCurrentSession()` and `subscribeToAuthChanges()` from Task 1.
 - Produces: `RequireAuth({ children }: { children: React.ReactNode })` that never mounts Chat while unauthenticated/checking.
 
-- [ ] **Step 1: Write failing guard tests**
+- [ ] **Step 1: Add failing route-guard tests**
 
-Mock `getCurrentSession` and `subscribeToAuthChanges`. Cover:
+Mock `getCurrentSession` and `subscribeToAuthChanges` in `tests/v11-auth-flow.test.tsx` and add:
 
 ```tsx
 it('redirects unauthenticated chat before protected children mount', async () => {
   getSessionMock.mockResolvedValue({ status: 'unauthenticated' })
+  subscribeMock.mockReturnValue(() => undefined)
   const childMounted = vi.fn()
   function Child() {
     childMounted()
@@ -441,19 +533,19 @@ it('redirects unauthenticated chat before protected children mount', async () =>
   }
 
   render(<RequireAuth><Child /></RequireAuth>)
-
   await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/login?next=/chat'))
   expect(childMounted).not.toHaveBeenCalled()
 })
 
 it('renders protected Chat when a valid session exists', async () => {
   getSessionMock.mockResolvedValue({ status: 'authenticated', accessToken: 'user-token' })
+  subscribeMock.mockReturnValue(() => undefined)
   render(<RequireAuth><div>protected chat</div></RequireAuth>)
   expect(await screen.findByText('protected chat')).toBeInTheDocument()
 })
 ```
 
-Add a test where the subscription listener receives `false` after mount and expects redirect to `/login?next=/chat`.
+Capture the subscription callback and add a third test: after authenticated mount, invoke it with `false`; expect `/login?next=/chat` navigation and protected content to unmount.
 
 - [ ] **Step 2: Confirm RED**
 
@@ -465,9 +557,7 @@ Expected: FAIL because `RequireAuth` does not exist.
 
 - [ ] **Step 3: Implement RequireAuth**
 
-Create a client component with state `'checking' | 'authenticated' | 'unauthenticated'`.
-
-Core shape:
+Create `components/v11/components/auth/RequireAuth.tsx`:
 
 ```tsx
 'use client'
@@ -484,8 +574,9 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     let active = true
     void getCurrentSession().then((session) => {
       if (!active) return
-      if (session.status === 'authenticated') setState('authenticated')
-      else {
+      if (session.status === 'authenticated') {
+        setState('authenticated')
+      } else {
         setState('unauthenticated')
         router.push('/login?next=/chat')
       }
@@ -493,8 +584,9 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
     const unsubscribe = subscribeToAuthChanges((authenticated) => {
       if (!active) return
-      if (authenticated) setState('authenticated')
-      else {
+      if (authenticated) {
+        setState('authenticated')
+      } else {
         setState('unauthenticated')
         router.push('/login?next=/chat')
       }
@@ -514,11 +606,9 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 }
 ```
 
-Do not render `SmartChatView`, the composer, or pending-prompt effects while checking/unauthenticated.
-
 - [ ] **Step 4: Wrap the Chat route**
 
-Modify `app/chat/page.tsx` to:
+Modify `app/chat/page.tsx`:
 
 ```tsx
 import { RequireAuth } from '@/components/v11/components/auth/RequireAuth'
@@ -533,7 +623,7 @@ export default function ChatPage() {
 }
 ```
 
-- [ ] **Step 5: Run focused tests**
+- [ ] **Step 5: Run focused tests and confirm GREEN**
 
 ```bash
 pnpm vitest run tests/v11-auth-flow.test.tsx
@@ -550,7 +640,7 @@ git commit -m "feat: require auth before chat mounts"
 
 ---
 
-### Task 4: Make the landing Login action real and preserve prompt handoff
+### Task 4: Make the landing Login action real and keep prompt handoff intact
 
 **Files:**
 - Modify: `components/v11/V11Landing.tsx`
@@ -564,13 +654,13 @@ git commit -m "feat: require auth before chat mounts"
 
 - [ ] **Step 1: Write failing landing-login test**
 
-Render `V11Landing`, click `เข้าสู่ระบบ`, and expect:
+Render `V11Landing`, click `เข้าสู่ระบบ`, and assert:
 
 ```tsx
 expect(pushMock).toHaveBeenCalledWith('/login?next=/chat')
 ```
 
-Retain the existing landing composer regression:
+Keep the existing composer regression asserting that a typed prompt is stored and navigation goes to `/chat`:
 
 ```tsx
 fireEvent.change(screen.getByPlaceholderText(/พิมพ์ข้อความ/), {
@@ -581,33 +671,31 @@ expect(peekPendingPrompt()).toBe('ถามจากหน้าแรก')
 expect(pushMock).toHaveBeenCalledWith('/chat')
 ```
 
-This proves the prompt remains in session storage while `RequireAuth` decides whether login is required.
-
 - [ ] **Step 2: Confirm RED for the login action**
 
 ```bash
 pnpm vitest run tests/v11-auth-flow.test.tsx tests/v11-live-smart-chat.test.tsx
 ```
 
-Expected: new login-action assertion FAIL because the Hero button is still disabled preview copy.
+Expected: the new Login action test FAILS because the current Hero login control is disabled preview copy.
 
 - [ ] **Step 3: Wire V11Landing login navigation**
 
-In `V11Landing.tsx`, add:
+Add:
 
 ```tsx
 const handleLogin = () => router.push('/login?next=/chat')
 ```
 
-Pass it to Hero:
+Render:
 
 ```tsx
 <HeroSection onStartClick={handleStart} onLoginClick={handleLogin} />
 ```
 
-- [ ] **Step 4: Replace disabled Hero login preview**
+- [ ] **Step 4: Replace the disabled Hero login control**
 
-Change the prop interface:
+Change the props:
 
 ```ts
 interface HeroSectionProps {
@@ -616,7 +704,7 @@ interface HeroSectionProps {
 }
 ```
 
-Replace the disabled button with:
+Render this active secondary action:
 
 ```tsx
 <button
@@ -657,35 +745,30 @@ git commit -m "feat: wire landing login entrypoint"
 
 **Interfaces:**
 - Consumes: `getCurrentSession()`, `clearBrowserSession()` from Task 1 and existing `setPendingPrompt()`.
-- Produces: Runtime adapter no longer owns a second Supabase client; Chat 401 causes prompt preservation + session clear + login navigation and never renders the unauthenticated text as a successful assistant answer.
+- Produces: one browser auth client for Login + Chat and deterministic 401 recovery.
 
-- [ ] **Step 1: Write failing adapter-sharing test**
+- [ ] **Step 1: Write failing runtime-auth tests**
 
-Mock `getCurrentSession()` to return `{ status: 'authenticated', accessToken: 'user-token' }`, stub `fetch`, call the default Chat sender path, and assert `/api/chat` receives:
+Mock `getCurrentSession()` to return `{ status: 'authenticated', accessToken: 'user-token' }`, stub `fetch`, execute a Chat prompt, and assert the network call contains:
 
 ```ts
 expect(fetch).toHaveBeenCalledWith('/api/chat', expect.objectContaining({
   method: 'POST',
-  headers: expect.objectContaining({
-    authorization: 'Bearer user-token',
-  }),
+  headers: expect.objectContaining({ authorization: 'Bearer user-token' }),
 }))
 ```
 
-Also test that `getCurrentSession()` returning `unauthenticated` or `unavailable` does not call `fetch` and returns `UNAUTHENTICATED` from `GatewayRuntimeAdapter.executePrompt`.
+Add another test where `getCurrentSession()` returns `{ status: 'unauthenticated' }`; assert `fetch` is not called and `GatewayRuntimeAdapter.executePrompt()` returns status `UNAUTHENTICATED`.
 
-- [ ] **Step 2: Write failing stale-session Chat recovery test**
+- [ ] **Step 2: Write failing stale-session recovery test**
 
-In a component test, mock:
+Mock `defaultRuntimeAdapter.executePrompt()` to resolve:
 
 ```ts
-vi.spyOn(defaultRuntimeAdapter, 'executePrompt').mockResolvedValue({
-  status: 'UNAUTHENTICATED',
-  message: 'กรุณาเข้าสู่ระบบ',
-})
+{ status: 'UNAUTHENTICATED', message: 'กรุณาเข้าสู่ระบบ' }
 ```
 
-Type `งานที่ยังไม่สำเร็จ`, submit, then assert:
+Render `SmartChatView`, type `งานที่ยังไม่สำเร็จ`, submit, then assert:
 
 ```tsx
 await waitFor(() => expect(peekPendingPrompt()).toBe('งานที่ยังไม่สำเร็จ'))
@@ -694,33 +777,25 @@ expect(pushMock).toHaveBeenCalledWith('/login?next=/chat')
 expect(screen.queryByText('กรุณาเข้าสู่ระบบ')).not.toBeInTheDocument()
 ```
 
-The exact unsatisfied prompt must be stored before leaving Chat.
-
 - [ ] **Step 3: Confirm RED**
 
 ```bash
 pnpm vitest run tests/v11-live-smart-chat.test.tsx tests/v11-auth-flow.test.tsx
 ```
 
-Expected: FAIL because runtimeAdapter still owns `createClient` and SmartChatView currently treats every adapter message as displayable output.
+Expected: FAIL because `runtimeAdapter.ts` still creates its own Supabase client and `SmartChatView` currently renders every adapter message.
 
 - [ ] **Step 4: Refactor runtimeAdapter to use browserAuth**
 
-Remove:
+Remove the direct Supabase import, `browserSupabase`, and `getBrowserSupabase()` from `runtimeAdapter.ts`.
 
-```ts
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-let browserSupabase: SupabaseClient | null = null
-function getBrowserSupabase() { ... }
-```
-
-Replace with:
+Add:
 
 ```ts
 import { getCurrentSession } from './browserAuth'
 ```
 
-Inside the authenticated sender:
+In the authenticated sender:
 
 ```ts
 const session = await getCurrentSession()
@@ -738,9 +813,7 @@ const response = await fetch('/api/chat', {
 })
 ```
 
-Keep the existing verified-response contract and provider-neutral extraction unchanged. Do not alter non-Chat capability behavior in this milestone.
-
-Update user-facing unauthenticated adapter copy to remove the stale `Smart Chat`/`Live` wording, for example:
+Keep verified-response parsing and all non-Chat behavior unchanged. Update only the unauthenticated copy to:
 
 ```ts
 return {
@@ -751,7 +824,7 @@ return {
 
 - [ ] **Step 5: Handle UNAUTHENTICATED in SmartChatView before rendering**
 
-Add imports:
+Add:
 
 ```tsx
 import { useRouter } from 'next/navigation'
@@ -759,13 +832,13 @@ import { clearBrowserSession } from '../../services/browserAuth'
 import { clearPendingPrompt, peekPendingPrompt, setPendingPrompt } from '../../services/promptHandoff'
 ```
 
-Create router inside the component:
+Inside the component:
 
 ```tsx
 const router = useRouter()
 ```
 
-Immediately after `executePrompt` returns and after the abort check, handle auth failure before creating/displaying the result text:
+Immediately after `executePrompt()` returns and after the abort check:
 
 ```tsx
 if (result.status === 'UNAUTHENTICATED') {
@@ -781,9 +854,7 @@ if (result.status === 'UNAUTHENTICATED') {
 }
 ```
 
-The user message may remain visible briefly until route navigation, but the empty assistant placeholder must be removed and the adapter's unauthenticated copy must not render as a successful assistant response.
-
-Include `router` in the callback dependency list.
+Add `router` to the `handleSendMessage` dependency list. Do not render the adapter's unauthenticated message as an assistant response.
 
 - [ ] **Step 6: Run focused auth + Chat tests**
 
@@ -793,7 +864,7 @@ pnpm vitest run tests/v11-auth-flow.test.tsx tests/v11-live-smart-chat.test.tsx
 
 Expected: PASS, including prompt preservation and no fake assistant answer on 401.
 
-- [ ] **Step 7: Run all unit/component tests**
+- [ ] **Step 7: Run all tests**
 
 ```bash
 pnpm test
@@ -813,96 +884,74 @@ git commit -m "feat: fail closed when chat session expires"
 ### Task 6: Full verification, Preview, and mobile acceptance
 
 **Files:**
-- No planned production-code changes unless verification exposes a defect directly in this milestone.
-- Review: all Task 1-5 files.
+- Review all Task 1-5 files; make no unrelated changes.
 
 **Interfaces:**
 - Consumes: completed auth flow from Tasks 1-5.
 - Produces: evidence that the branch is safe for Preview review; does not authorize Production.
 
-- [ ] **Step 1: Run the repository's complete verification command**
-
-Run from `lsuperagent-pro`:
+- [ ] **Step 1: Run fresh full verification**
 
 ```bash
 pnpm verify
 ```
 
-Expected sequence, all exit code 0:
+Expected, all exit code 0:
 - `pnpm guard:secrets`
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm test`
 - `pnpm build`
 
-Do not claim completion from an earlier CI run; use a fresh run from the final implementation commit.
-
-- [ ] **Step 2: Inspect the final diff for scope creep and secrets**
-
-Run:
+- [ ] **Step 2: Inspect final diff for scope and secrets**
 
 ```bash
 git diff main...HEAD -- app/login app/chat components/v11/components/auth components/v11/components/chat components/v11/components/landing components/v11/services tests
 ```
 
-Confirm:
-- no service-role/provider keys;
-- no direct browser -> provider calls;
-- no changes to Research/Image/Agent/Memory execution;
-- no signup/reset/OAuth additions;
-- `/api/chat` remains the same-origin boundary.
+Confirm no service-role/provider keys, no browser-to-provider call, no Research/Image/Agent/Memory execution change, and no signup/reset/OAuth feature.
 
-- [ ] **Step 3: Push branch and wait for GitHub/Vercel Preview checks**
+- [ ] **Step 3: Push only the feature branch and wait for Preview checks**
 
-Push only the feature branch. Confirm both repository verification workflows pass on the final head and Vercel reports a successful Preview deployment. Do not merge `main`.
+Confirm repository verification workflows pass on the final head and Vercel reports a successful Preview deployment. Do not merge `main`.
 
-- [ ] **Step 4: Verify unauthenticated mobile flow at 393 x 852**
-
-In the Preview at exactly 393 x 852:
+- [ ] **Step 4: Verify unauthenticated flow at exactly 393 x 852**
 
 1. Clear the browser Supabase session.
 2. Open `/chat` directly.
-3. Confirm Chat UI never flashes/mounts before redirect.
-4. Confirm destination is `/login?next=/chat`.
-5. Confirm Login is single-column, no horizontal overflow, labels visible, touch targets at least 44px.
+3. Confirm Chat UI never flashes before redirect.
+4. Confirm destination `/login?next=/chat`.
+5. Confirm Login has no horizontal overflow and all inputs/buttons remain comfortably tappable.
 6. Submit known-invalid credentials and confirm only `อีเมลหรือรหัสผ่านไม่ถูกต้อง` appears.
-7. Confirm no `/api/chat` provider-bound request occurs while unauthenticated.
+7. Confirm no `/api/chat` request occurs while unauthenticated.
 
-- [ ] **Step 5: Verify authenticated prompt handoff at 393 x 852**
+- [ ] **Step 5: Verify authenticated prompt handoff at exactly 393 x 852**
 
-Using a valid Supabase email/password account already provisioned outside this implementation:
+Using a valid Supabase email/password account provisioned outside this implementation:
 
 1. Sign out.
-2. Return to `/`.
-3. Type a unique prompt such as `AUTH-HANDOFF-393-852` in the landing composer.
+2. Open `/`.
+3. Type `AUTH-HANDOFF-393-852` into the landing composer.
 4. Submit.
 5. Confirm login gate appears before Chat execution.
-6. Sign in successfully.
-7. Confirm `/chat` opens and the exact prompt is delivered once, not zero or twice.
-8. Confirm the network request is `POST /api/chat` with a Bearer user token and no provider credential in browser traffic.
+6. Sign in.
+7. Confirm `/chat` opens and the exact prompt is delivered once.
+8. Confirm browser traffic shows `POST /api/chat` with a Bearer user token and no provider credential.
 
 Do not paste or commit real credentials into tests, docs, issues, or logs.
 
-- [ ] **Step 6: Verify stale-session/401 behavior**
+- [ ] **Step 6: Verify stale-session/401 recovery**
 
-With a deliberately expired/invalid local session or a controlled test path that makes `/api/chat` return 401:
-
-1. Type a unique prompt.
-2. Submit.
+1. Use a controlled invalid/expired local session or controlled Preview response that produces `/api/chat` 401.
+2. Type a unique prompt and submit.
 3. Confirm no assistant success is rendered.
-4. Confirm navigation returns to `/login?next=/chat`.
+4. Confirm navigation to `/login?next=/chat`.
 5. Sign in again.
 6. Confirm the preserved prompt is delivered exactly once.
 
-- [ ] **Step 7: Record Preview evidence and stop at the production gate**
+- [ ] **Step 7: Record evidence and stop at production gate**
 
-Report:
-- final branch head SHA;
-- fresh R1/R2 workflow conclusions;
-- Vercel Preview status/link if available;
-- 393 x 852 acceptance result;
-- auth/prompt-handoff/401 results;
-- any downstream runtime limitation separately from auth readiness.
+Record final branch head SHA, fresh R1/R2 results, Preview status/link, 393 x 852 result, prompt-handoff result, and 401-recovery result. Report downstream runtime readiness separately from auth readiness.
 
 Explicitly state: **Production remains unchanged. Merge/deploy requires separate user approval.**
 
@@ -910,7 +959,7 @@ Explicitly state: **Production remains unchanged. Merge/deploy requires separate
 
 ## Self-review result
 
-- Spec coverage: Login, guard-before-mount, shared Supabase client, safe `next`, landing prompt preservation, direct `/chat`, runtime 401 recovery, fail-closed behavior, mobile verification, and production gate are all mapped to tasks above.
-- Placeholder scan: no TODO/TBD/"implement later" steps are present.
+- Spec coverage: Login, guard-before-mount, shared Supabase client, safe `next`, landing prompt preservation, direct `/chat`, runtime 401 recovery, fail-closed behavior, mobile verification, and production gate are mapped above.
+- Placeholder scan: no TODO, TBD, omitted code instruction, or deferred feature remains.
 - Type consistency: Task 1 defines the exact auth-service exports consumed by Tasks 2, 3, and 5.
 - Scope: one subsystem only — email/password authentication for Chat. No package, database, provider, or other capability work is required.
