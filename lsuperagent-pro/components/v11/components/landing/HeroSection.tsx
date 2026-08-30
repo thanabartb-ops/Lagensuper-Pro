@@ -5,9 +5,14 @@ import { GradientButton } from '../common/GradientButton';
 interface HeroSectionProps {
   onStartClick: () => void;
   onLoginClick: () => void;
+  onSignupClick?: () => void;
 }
 
-export const HeroSection: React.FC<HeroSectionProps> = ({ onStartClick, onLoginClick }) => {
+export const HeroSection: React.FC<HeroSectionProps> = ({
+  onStartClick,
+  onLoginClick,
+  onSignupClick,
+}) => {
   return (
     <section className="relative w-full pt-8 pb-12 sm:py-16 flex flex-col items-center justify-center text-center overflow-hidden">
       <div
@@ -46,13 +51,25 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onStartClick, onLoginC
           </GradientButton>
         </div>
 
-        <button
-          type="button"
-          onClick={onLoginClick}
-          className="mt-4 flex min-h-[44px] items-center justify-center px-3 py-1.5 text-xs text-white/55 transition-colors hover:text-white sm:text-sm"
-        >
-          เข้าสู่ระบบ
-        </button>
+        <div className="mt-3 flex min-h-[44px] items-center justify-center gap-1 text-xs sm:text-sm">
+          {onSignupClick && (
+            <button
+              type="button"
+              onClick={onSignupClick}
+              className="flex min-h-[44px] items-center justify-center px-3 py-1.5 font-medium text-white/70 transition-colors hover:text-white"
+            >
+              สมัครใช้งาน
+            </button>
+          )}
+          {onSignupClick && <span className="text-white/20" aria-hidden="true">•</span>}
+          <button
+            type="button"
+            onClick={onLoginClick}
+            className="flex min-h-[44px] items-center justify-center px-3 py-1.5 text-white/55 transition-colors hover:text-white"
+          >
+            เข้าสู่ระบบ
+          </button>
+        </div>
       </div>
     </section>
   );
