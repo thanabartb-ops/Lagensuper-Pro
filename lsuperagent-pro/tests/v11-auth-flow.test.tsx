@@ -11,24 +11,28 @@ const {
   pushMock,
   routerMock,
   signInMock,
+  signUpMock,
   getSessionMock,
   subscribeMock,
   protectedMountMock,
+  searchParamsMock,
 } = vi.hoisted(() => {
   const pushMock = vi.fn()
   return {
     pushMock,
     routerMock: { push: pushMock, replace: pushMock },
     signInMock: vi.fn(),
+    signUpMock: vi.fn(),
     getSessionMock: vi.fn(),
     subscribeMock: vi.fn(),
     protectedMountMock: vi.fn(),
+    searchParamsMock: vi.fn(),
   }
 })
 
 vi.mock('next/navigation', () => ({
   useRouter: () => routerMock,
-  useSearchParams: () => new URLSearchParams('next=/chat'),
+  useSearchParams: () => searchParamsMock(),
 }))
 
 vi.mock('../components/v11/services/browserAuth', async (importOriginal) => {
@@ -36,6 +40,7 @@ vi.mock('../components/v11/services/browserAuth', async (importOriginal) => {
   return {
     ...actual,
     signInWithPassword: signInMock,
+    signUpWithPassword: signUpMock,
     getCurrentSession: getSessionMock,
     subscribeToAuthChanges: subscribeMock,
   }
@@ -43,15 +48,18 @@ vi.mock('../components/v11/services/browserAuth', async (importOriginal) => {
 
 beforeEach(() => {
   subscribeMock.mockReturnValue(() => undefined)
+  searchParamsMock.mockReturnValue(new URLSearchParams('next=/chat'))
 })
 
 afterEach(() => {
   cleanup()
   pushMock.mockReset()
   signInMock.mockReset()
+  signUpMock.mockReset()
   getSessionMock.mockReset()
   subscribeMock.mockReset()
   protectedMountMock.mockReset()
+  searchParamsMock.mockReset()
 })
 
 function fillLoginForm() {
@@ -125,6 +133,43 @@ describe('V11 email/password login', () => {
   })
 })
 
+describe('V11 email/password signup', () => {
+  it('opens signup mode from the landing page', () => {
+    render(<V11Landing />)
+
+    const signupButton = screen.getByRole('button', { name: 'สมัครใช้งาน' })
+    expect(signupButton).toBeEnabled()
+    fireEvent.click(signupButton)
+
+    expect(pushMock).toHaveBeenCalledWith('/login?next=/chat&mode=signup')
+  })
+
+  it('creates an account and enters Chat when signup returns a session', async () => {
+    searchParamsMock.mockReturnValue(new URLSearchParams('next=/chat&mode=signup'))
+    signUpMock.mockResolvedValue({ status: 'authenticated' })
+    render(<LoginView />)
+    fillLoginForm()
+    fireEvent.click(screen.getByRole('button', { name: 'สมัครใช้งาน' }))
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/chat'))
+    expect(signUpMock).toHaveBeenCalledWith('me@example.com', 'secret')
+    expect(signInMock).not.toHaveBeenCalled()
+  })
+
+  it('explains email confirmation instead of pretending signup is authenticated', async () => {
+    searchParamsMock.mockReturnValue(new URLSearchParams('next=/chat&mode=signup'))
+    signUpMock.mockResolvedValue({ status: 'confirmation_required' })
+    render(<LoginView />)
+    fillLoginForm()
+    fireEvent.click(screen.getByRole('button', { name: 'สมัครใช้งาน' }))
+
+    expect(
+      await screen.findByText('สมัครเรียบร้อย กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี'),
+    ).toBeInTheDocument()
+    expect(pushMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('V11 landing auth entry', () => {
   it('offers a real login action that returns to Chat after authentication', () => {
     render(<V11Landing />)
@@ -161,7 +206,6 @@ describe('V11 chat auth gate', () => {
         <ProtectedProbe />
       </RequireAuth>,
     )
-
     expect(await screen.findByText('protected-chat')).toBeInTheDocument()
     expect(protectedMountMock).toHaveBeenCalledTimes(1)
     expect(pushMock).not.toHaveBeenCalled()
