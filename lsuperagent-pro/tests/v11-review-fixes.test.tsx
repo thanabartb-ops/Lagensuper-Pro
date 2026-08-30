@@ -64,9 +64,18 @@ describe('V11 review fixes', () => {
     expect(screen.getByText(/ข้อมูลที่แสดงเป็นชุดตัวอย่างคงที่/)).toBeInTheDocument()
   })
 
-  it('presents authentication as unavailable instead of a dead sign-in action', () => {
-    render(<HeroSection onStartClick={() => undefined} />)
-    expect(screen.getByRole('button', { name: 'ระบบเข้าสู่ระบบยังไม่พร้อม (Preview)' })).toBeDisabled()
+  it('offers an enabled login action on the landing hero', () => {
+    const onLoginClick = vi.fn()
+    render(
+      <HeroSection
+        onStartClick={() => undefined}
+        onLoginClick={onLoginClick}
+      />,
+    )
+    const loginButton = screen.getByRole('button', { name: 'เข้าสู่ระบบ' })
+    expect(loginButton).toBeEnabled()
+    fireEvent.click(loginButton)
+    expect(onLoginClick).toHaveBeenCalledTimes(1)
   })
 
   it('keeps memory delete controls visible and touch-sized', () => {
