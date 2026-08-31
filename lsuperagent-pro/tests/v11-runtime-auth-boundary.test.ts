@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync, readdirSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { sessionMock, fetchMock } = vi.hoisted(() => ({
@@ -62,5 +64,50 @@ describe('chat runtime shared auth boundary', () => {
 
     expect(result.status).toBe('UNAUTHENTICATED')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('gateway-to-runtime secret stays outside this app', () => {
+  const GATEWAY_ONLY_SECRET = 'RUNTIME_SHARED_SECRET'
+
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) return sourceFiles(path)
+      return /\.(ts|tsx)$/.test(entry.name) ? [path] : []
+    })
+  }
+
+  /**
+   * The gateway proves its own identity to the Supabase runtime with this
+   * credential. It belongs to the W gateway server and the runtime secret store
+   * only. This app never holds it, so a reference appearing here means it has
+   * been pulled one hop too far toward the browser.
+   */
+  it('is absent from every browser component and service', () => {
+    const offenders = sourceFiles(resolve(process.cwd(), 'components')).filter((path) =>
+      readFileSync(path, 'utf8').includes(GATEWAY_ONLY_SECRET),
+    )
+
+    expect(offenders).toEqual([])
+  })
+
+  it('is absent from the server chat boundary and gateway client', () => {
+    const serverSurface = [
+      'app/api/chat/route.ts',
+      ...sourceFiles(resolve(process.cwd(), 'lib/gateway')),
+    ]
+
+    for (const path of serverSurface) {
+      expect(readFileSync(resolve(process.cwd(), path), 'utf8')).not.toContain(
+        GATEWAY_ONLY_SECRET,
+      )
+    }
+  })
+
+  it('is absent from the public environment contract', () => {
+    const envExample = readFileSync(resolve(process.cwd(), '.env.example'), 'utf8')
+
+    expect(envExample).not.toContain(GATEWAY_ONLY_SECRET)
   })
 })
