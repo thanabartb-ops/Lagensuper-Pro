@@ -11,7 +11,10 @@ describe('V11 mobile full-screen chat regressions', () => {
     expect(shell).toContain("const isChatRoute = currentRoute === 'smart_chat'")
     expect(shell).toContain("isChatRoute ? 'h-dvh overflow-hidden' : 'min-h-screen'")
     expect(shell).toContain("isChatRoute ? 'min-h-0 overflow-hidden' : ''")
-    expect(shell).toContain('{!isChatRoute && (')
+    // The footer must stay behind the chat guard. Further route guards may
+    // join that condition, so match the guard and the element it wraps rather
+    // than one exact spelling of the line.
+    expect(shell).toMatch(/\{!isChatRoute &&[\s\S]{0,60}?<footer/)
   })
 
   it('fills the dynamic shell while reserving space for mobile navigation', () => {

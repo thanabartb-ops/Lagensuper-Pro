@@ -121,6 +121,48 @@ A provider left disabled is not a broken build: its button shows the standard
 unavailable message while the other providers and the password form keep
 working.
 
+## Getting a new account all the way into the app
+
+Signing up and reaching a working app depends on settings outside this
+repository. What follows is what each one gates, so a stuck account can be
+diagnosed without reading the code.
+
+### 1. Browser environment, on the deployment
+
+`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+
+These two names are a fixed contract: `tests/pro-r1.test.tsx` asserts that
+`.env.example` declares exactly these plus `NEXT_PUBLIC_APP_ENV`. A key pasted
+under another name — `NEXT_PUBLIC_SUPABASE_ANON_KEY`, say — leaves the client
+unconfigured, and every auth action then reports the standard unavailable
+message with nothing else to go on.
+
+### 2. Email confirmation, in Supabase
+
+Supabase enables **Confirm email** by default. With it on, sign-up creates the
+user but returns no session, the app reports
+`สมัครเรียบร้อย กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี`, and the account cannot enter
+until the emailed link is followed. That is the intended behavior, not a
+defect.
+
+For sign-up to land straight in the app, turn it off at Authentication ->
+Providers -> Email -> Confirm email. That is a policy decision — it trades the
+address-ownership check for immediate entry — so it belongs to the operator,
+not to this code.
+
+### 3. What a signed-in account can actually reach
+
+| Area | State once signed in |
+| --- | --- |
+| `/chat` auth gate | Works. OAuth and password sessions pass it identically. |
+| Memory, Projects, Settings, Tools pages | Work. No auth gate on these routes. |
+| Chat replies | Needs `LSUPERAGENT_GATEWAY_URL`, `LSUPERAGENT_GATEWAY_CLIENT_ID` (exactly `lsuperagent-pro`), `LSUPERAGENT_GATEWAY_HMAC_SECRET`, **and a running gateway** returning a verified execution. Until then the runtime reports `UPSTREAM_UNAVAILABLE`. |
+| Deep Research, Create Image, Agent Mode | Mock by design. `runtimeAdapter.ts` routes everything that is not `smart_chat` to `MockRuntimeAdapter`. Making these live is a separate milestone. |
+
+So a correctly configured Supabase project gets an account signed up, signed
+in, past the gate, and through every page. Real Chat answers additionally
+require the gateway, which is out of scope here.
+
 ## Test design
 
 Service level, against a stub client — the layer where the slug is observable:

@@ -15,6 +15,9 @@ export function V11Shell({ children }: { children: ReactNode }) {
   const router = useRouter()
   const currentRoute = pathToRoute(pathname)
   const isChatRoute = currentRoute === 'smart_chat'
+  // Auth is a focused, single-purpose screen: no marketing footer and no
+  // runtime diagnostics, which read as an error to someone signing in.
+  const isAuthRoute = pathname === '/login'
 
   useEffect(() => {
     try {
@@ -40,7 +43,7 @@ export function V11Shell({ children }: { children: ReactNode }) {
       <main className={`w-full flex-1 ${isChatRoute ? 'min-h-0 overflow-hidden' : ''}`}>
         {children}
       </main>
-      {!isChatRoute && (
+      {!isChatRoute && !isAuthRoute && (
         <footer className="mb-14 border-t border-[#312E81]/30 bg-[#0C0D1A] py-8 text-center text-xs text-white/40 md:mb-0">
           <div className="mx-auto flex max-w-[1120px] flex-col items-center justify-between gap-3 px-4 sm:flex-row">
             <div className="flex items-center gap-2">
