@@ -3,7 +3,6 @@
 import { useState, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { LockKeyhole, Mail } from 'lucide-react'
-import { LSLogo } from '../common/LSLogo'
 import { OAuthProviderButtons } from './OAuthProviderButtons'
 import {
   sanitizeAuthNext,
@@ -107,11 +106,14 @@ export function LoginView() {
   return (
     <main className="flex min-h-[calc(100dvh-5rem)] w-full items-center justify-center px-4 py-8">
       <section className="w-full max-w-[420px] rounded-3xl border border-[#312E81] bg-[#0C0D1A] p-5 shadow-2xl sm:p-8">
+        {/* The app header already carries the LS mark and wordmark, so this
+            heading names the action instead of repeating the brand. */}
         <div className="mb-7 flex flex-col items-center text-center">
-          <LSLogo size="lg" showGlow />
-          <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-white">LSUPERAGENT</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-white">
+            {isSignup ? 'สมัครใช้งาน' : 'เข้าสู่ระบบ'}
+          </h1>
           <p className="mt-2 text-sm text-white/50">
-            {isSignup ? 'สมัครบัญชีเพื่อใช้งาน LS_BOTAGENT' : 'เข้าสู่ระบบเพื่อใช้งาน LS_BOTAGENT'}
+            {isSignup ? 'สร้างบัญชีเพื่อใช้งาน LS_BOTAGENT' : 'เข้าสู่ระบบเพื่อใช้งาน LS_BOTAGENT'}
           </p>
         </div>
 
