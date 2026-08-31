@@ -5,6 +5,7 @@ export type AuthClientLike = {
     getSession?: () => Promise<unknown>
     signInWithPassword?: (credentials: { email: string; password: string }) => Promise<unknown>
     signUp?: (credentials: { email: string; password: string }) => Promise<unknown>
+    signInWithOAuth?: (options: { provider: string; options?: { redirectTo?: string } }) => Promise<unknown>
     signOut?: () => Promise<unknown>
     onAuthStateChange?: (
       callback: (_event: string, session: unknown) => void,
@@ -26,6 +27,12 @@ export type SignUpResult =
   | { status: 'authenticated' }
   | { status: 'confirmation_required' }
   | { status: 'invalid_signup' }
+  | { status: 'unavailable' }
+
+export type OAuthProvider = 'google' | 'microsoft' | 'apple'
+
+export type SignInOAuthResult =
+  | { status: 'authenticated' }
   | { status: 'unavailable' }
 
 let browserClient: AuthClientLike | null = null
@@ -178,6 +185,26 @@ export async function signUpWithPassword(
     }
 
     return { status: 'unavailable' }
+  } catch {
+    return { status: 'unavailable' }
+  }
+}
+
+export async function signInWithOAuth(
+  provider: OAuthProvider,
+  client: AuthClientLike | null = getBrowserAuthClient(),
+): Promise<SignInOAuthResult> {
+  if (!client?.auth.signInWithOAuth) return { status: 'unavailable' }
+
+  try {
+    const result = await client.auth.signInWithOAuth({
+      provider,
+    })
+
+    if (!isRecord(result)) return { status: 'unavailable' }
+    if (result.error) return { status: 'unavailable' }
+
+    return { status: 'authenticated' }
   } catch {
     return { status: 'unavailable' }
   }
