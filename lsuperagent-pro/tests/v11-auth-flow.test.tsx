@@ -12,6 +12,7 @@ const {
   routerMock,
   signInMock,
   signUpMock,
+  oauthMock,
   getSessionMock,
   subscribeMock,
   protectedMountMock,
@@ -23,6 +24,7 @@ const {
     routerMock: { push: pushMock, replace: pushMock },
     signInMock: vi.fn(),
     signUpMock: vi.fn(),
+    oauthMock: vi.fn(),
     getSessionMock: vi.fn(),
     subscribeMock: vi.fn(),
     protectedMountMock: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock('../components/v11/services/browserAuth', async (importOriginal) => {
     ...actual,
     signInWithPassword: signInMock,
     signUpWithPassword: signUpMock,
+    signInWithOAuth: oauthMock,
     getCurrentSession: getSessionMock,
     subscribeToAuthChanges: subscribeMock,
   }
@@ -56,6 +59,7 @@ afterEach(() => {
   pushMock.mockReset()
   signInMock.mockReset()
   signUpMock.mockReset()
+  oauthMock.mockReset()
   getSessionMock.mockReset()
   subscribeMock.mockReset()
   protectedMountMock.mockReset()
@@ -167,6 +171,71 @@ describe('V11 email/password signup', () => {
       await screen.findByText('สมัครเรียบร้อย กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี'),
     ).toBeInTheDocument()
     expect(pushMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('V11 OAuth social login', () => {
+  it.each([
+    ['Google', 'google'],
+    ['Microsoft', 'microsoft'],
+    ['Apple', 'apple'],
+  ])('starts the %s OAuth flow without touching password sign-in', async (label, provider) => {
+    oauthMock.mockResolvedValue({ status: 'authenticated' })
+    render(<LoginView />)
+
+    fireEvent.click(screen.getByRole('button', { name: label }))
+
+    await waitFor(() => expect(oauthMock).toHaveBeenCalledWith(provider))
+    expect(signInMock).not.toHaveBeenCalled()
+    expect(signUpMock).not.toHaveBeenCalled()
+  })
+
+  it('shows the Thai unavailable message without raw provider text', async () => {
+    oauthMock.mockResolvedValue({ status: 'unavailable' })
+    render(<LoginView />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Google' }))
+
+    expect(
+      await screen.findByText('ระบบล็อกอินยังไม่พร้อม กรุณาลองใหม่อีกครั้ง'),
+    ).toBeInTheDocument()
+    expect(pushMock).not.toHaveBeenCalled()
+    expect(screen.queryByText(/supabase/i)).not.toBeInTheDocument()
+  })
+
+  it('re-enables the buttons after an unavailable provider so the user can retry', async () => {
+    oauthMock.mockResolvedValue({ status: 'unavailable' })
+    render(<LoginView />)
+
+    const googleButton = screen.getByRole('button', { name: 'Google' })
+    fireEvent.click(googleButton)
+
+    await waitFor(() => expect(googleButton).toBeEnabled())
+    fireEvent.click(googleButton)
+    await waitFor(() => expect(oauthMock).toHaveBeenCalledTimes(2))
+  })
+
+  it('blocks duplicate OAuth submits while a provider hand-off is pending', async () => {
+    let resolve!: (value: { status: 'authenticated' }) => void
+    oauthMock.mockReturnValue(
+      new Promise<{ status: 'authenticated' }>((done) => {
+        resolve = done
+      }),
+    )
+
+    render(<LoginView />)
+    const googleButton = screen.getByRole('button', { name: 'Google' })
+    const submitButton = screen.getByRole('button', { name: 'เข้าสู่ระบบ' })
+    fireEvent.click(googleButton)
+
+    await waitFor(() => expect(googleButton).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Microsoft' })).toBeDisabled()
+    expect(submitButton).toBeDisabled()
+
+    fireEvent.click(googleButton)
+    expect(oauthMock).toHaveBeenCalledTimes(1)
+
+    resolve({ status: 'authenticated' })
   })
 })
 
