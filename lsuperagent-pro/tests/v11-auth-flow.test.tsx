@@ -183,7 +183,7 @@ describe('V11 OAuth social login', () => {
     oauthMock.mockResolvedValue({ status: 'authenticated' })
     render(<LoginView />)
 
-    fireEvent.click(screen.getByRole('button', { name: label }))
+    fireEvent.click(screen.getByRole('button', { name: `ดำเนินการต่อด้วย ${label}` }))
 
     await waitFor(() => expect(oauthMock).toHaveBeenCalledWith(provider))
     expect(signInMock).not.toHaveBeenCalled()
@@ -194,7 +194,7 @@ describe('V11 OAuth social login', () => {
     oauthMock.mockResolvedValue({ status: 'unavailable' })
     render(<LoginView />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Google' }))
+    fireEvent.click(screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Google' }))
 
     expect(
       await screen.findByText('ระบบล็อกอินยังไม่พร้อม กรุณาลองใหม่อีกครั้ง'),
@@ -207,7 +207,7 @@ describe('V11 OAuth social login', () => {
     oauthMock.mockResolvedValue({ status: 'unavailable' })
     render(<LoginView />)
 
-    const googleButton = screen.getByRole('button', { name: 'Google' })
+    const googleButton = screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Google' })
     fireEvent.click(googleButton)
 
     await waitFor(() => expect(googleButton).toBeEnabled())
@@ -224,18 +224,46 @@ describe('V11 OAuth social login', () => {
     )
 
     render(<LoginView />)
-    const googleButton = screen.getByRole('button', { name: 'Google' })
+    const googleButton = screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Google' })
+    const microsoftButton = screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Microsoft' })
     const submitButton = screen.getByRole('button', { name: 'เข้าสู่ระบบ' })
     fireEvent.click(googleButton)
 
     await waitFor(() => expect(googleButton).toBeDisabled())
-    expect(screen.getByRole('button', { name: 'Microsoft' })).toBeDisabled()
+    expect(microsoftButton).toBeDisabled()
     expect(submitButton).toBeDisabled()
 
     fireEvent.click(googleButton)
     expect(oauthMock).toHaveBeenCalledTimes(1)
 
     resolve({ status: 'authenticated' })
+  })
+
+  it('marks only the chosen provider as pending', async () => {
+    let resolve!: (value: { status: 'authenticated' }) => void
+    oauthMock.mockReturnValue(
+      new Promise<{ status: 'authenticated' }>((done) => {
+        resolve = done
+      }),
+    )
+
+    render(<LoginView />)
+    fireEvent.click(screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Microsoft' }))
+
+    expect(await screen.findByText('กำลังเปิด Microsoft...')).toBeInTheDocument()
+    expect(screen.queryByText('กำลังเปิด Google...')).not.toBeInTheDocument()
+    expect(screen.getByText('ดำเนินการต่อด้วย Google')).toBeInTheDocument()
+
+    resolve({ status: 'authenticated' })
+  })
+
+  it('offers the same providers in signup mode', () => {
+    searchParamsMock.mockReturnValue(new URLSearchParams('next=/chat&mode=signup'))
+    render(<LoginView />)
+
+    expect(screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Google' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Microsoft' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Apple' })).toBeEnabled()
   })
 })
 

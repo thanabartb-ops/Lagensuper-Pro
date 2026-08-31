@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { LockKeyhole, Mail } from 'lucide-react'
 import { LSLogo } from '../common/LSLogo'
+import { OAuthProviderButtons } from './OAuthProviderButtons'
 import {
   sanitizeAuthNext,
   signInWithPassword,
@@ -23,6 +24,7 @@ export function LoginView() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [pendingProvider, setPendingProvider] = useState<OAuthProvider | null>(null)
   const [messageText, setMessageText] = useState('')
   const [messageKind, setMessageKind] = useState<'error' | 'success'>('error')
 
@@ -82,14 +84,19 @@ export function LoginView() {
 
   const handleOAuthSignIn = async (provider: OAuthProvider) => {
     if (submitting) return
+
     setSubmitting(true)
+    setPendingProvider(provider)
     setMessageText('')
     setMessageKind('error')
 
     const result = await signInWithOAuth(provider)
 
+    // A successful hand-off navigates to the provider, so the pending state is
+    // deliberately left in place until the browser leaves this page.
     if (result.status === 'unavailable') {
       setMessageText('ระบบล็อกอินยังไม่พร้อม กรุณาลองใหม่อีกครั้ง')
+      setPendingProvider(null)
       setSubmitting(false)
     }
   }
@@ -179,44 +186,13 @@ export function LoginView() {
                 : 'เข้าสู่ระบบ'}
           </button>
 
-          <div className="mt-6 space-y-2">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/10"></div>
-              </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-[#0C0D1A] px-2 text-white/40">หรือ</span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              disabled={submitting}
-              onClick={() => handleOAuthSignIn('google')}
-              className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-[#312E81] bg-[#131525] px-4 py-3 text-base font-semibold text-white transition-colors hover:bg-[#1A1D2E] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Google
-            </button>
-
-            <button
-              type="button"
-              disabled={submitting}
-              onClick={() => handleOAuthSignIn('microsoft')}
-              className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-[#312E81] bg-[#131525] px-4 py-3 text-base font-semibold text-white transition-colors hover:bg-[#1A1D2E] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Microsoft
-            </button>
-
-            <button
-              type="button"
-              disabled={submitting}
-              onClick={() => handleOAuthSignIn('apple')}
-              className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-[#312E81] bg-[#131525] px-4 py-3 text-base font-semibold text-white transition-colors hover:bg-[#1A1D2E] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Apple
-            </button>
-          </div>
         </form>
+
+        <OAuthProviderButtons
+          disabled={submitting}
+          pendingProvider={pendingProvider}
+          onSelect={handleOAuthSignIn}
+        />
 
         {isSignup ? (
           <button

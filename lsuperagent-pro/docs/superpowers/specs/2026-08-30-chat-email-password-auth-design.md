@@ -46,7 +46,8 @@ This milestone does not add:
 - Sign up.
 - Forgot/reset password.
 - Magic Link.
-- Google or other OAuth providers.
+- Google or other OAuth providers. Superseded by a later milestone: see
+  `2026-08-31-chat-oauth-social-login-design.md`.
 - Guest or anonymous Chat.
 - Server-side session middleware or a cookie-based SSR auth migration.
 - Changes to Deep Research, Image, Agent Mode, or Memory.
