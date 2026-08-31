@@ -211,6 +211,11 @@ export async function signInWithOAuth(
   try {
     const result = await client.auth.signInWithOAuth({
       provider: slug,
+      // Without this, the provider returns the user to Supabase's default Site
+      // URL instead of /chat, breaking the "sign in returns to Chat" flow that
+      // sanitizeAuthNext exists to guarantee. This app has one protected
+      // destination, so the redirect target is not dynamic.
+      options: { redirectTo: `${window.location.origin}/chat` },
     })
 
     if (!isRecord(result)) return { status: 'unavailable' }

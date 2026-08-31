@@ -164,7 +164,13 @@ describe('browser auth OAuth hand-off', () => {
     await expect(signInWithOAuth(provider, authClient({ signInWithOAuth: request }))).resolves.toEqual({
       status: 'authenticated',
     })
-    expect(request).toHaveBeenCalledWith({ provider: slug })
+    // Without an explicit redirectTo, Supabase sends the user back to its
+    // default Site URL instead of /chat, breaking the "sign in returns to
+    // Chat" guarantee sanitizeAuthNext exists to enforce.
+    expect(request).toHaveBeenCalledWith({
+      provider: slug,
+      options: { redirectTo: `${window.location.origin}/chat` },
+    })
   })
 
   it('normalizes a provider error without exposing raw Supabase text', async () => {
