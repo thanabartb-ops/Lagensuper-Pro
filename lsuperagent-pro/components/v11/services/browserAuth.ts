@@ -190,15 +190,27 @@ export async function signUpWithPassword(
   }
 }
 
+/**
+ * Supabase names the Microsoft provider `azure`. The app keeps the
+ * user-facing name, so the slug is translated at this boundary only.
+ */
+const SUPABASE_PROVIDER_SLUG: Record<OAuthProvider, string> = {
+  google: 'google',
+  microsoft: 'azure',
+  apple: 'apple',
+}
+
 export async function signInWithOAuth(
   provider: OAuthProvider,
   client: AuthClientLike | null = getBrowserAuthClient(),
 ): Promise<SignInOAuthResult> {
+  const slug = SUPABASE_PROVIDER_SLUG[provider]
+  if (!slug) return { status: 'unavailable' }
   if (!client?.auth.signInWithOAuth) return { status: 'unavailable' }
 
   try {
     const result = await client.auth.signInWithOAuth({
-      provider,
+      provider: slug,
     })
 
     if (!isRecord(result)) return { status: 'unavailable' }

@@ -4,9 +4,11 @@ import {
   clearBrowserSession,
   getCurrentSession,
   sanitizeAuthNext,
+  signInWithOAuth,
   signInWithPassword,
   subscribeToAuthChanges,
   type AuthClientLike,
+  type OAuthProvider,
 } from '../components/v11/services/browserAuth'
 
 afterEach(() => {
@@ -148,5 +150,43 @@ describe('browser auth service', () => {
     expect(listener).toHaveBeenNthCalledWith(1, true)
     expect(listener).toHaveBeenNthCalledWith(2, false)
     expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('browser auth OAuth hand-off', () => {
+  it.each<[OAuthProvider, string]>([
+    ['google', 'google'],
+    ['microsoft', 'azure'],
+    ['apple', 'apple'],
+  ])('sends %s to Supabase as the %s provider slug', async (provider, slug) => {
+    const request = vi.fn().mockResolvedValue({ data: { provider: slug, url: 'https://provider.example' }, error: null })
+
+    await expect(signInWithOAuth(provider, authClient({ signInWithOAuth: request }))).resolves.toEqual({
+      status: 'authenticated',
+    })
+    expect(request).toHaveBeenCalledWith({ provider: slug })
+  })
+
+  it('normalizes a provider error without exposing raw Supabase text', async () => {
+    const client = authClient({
+      signInWithOAuth: vi.fn().mockResolvedValue({
+        data: { provider: 'google', url: null },
+        error: { message: 'Unsupported provider: provider is not enabled' },
+      }),
+    })
+
+    await expect(signInWithOAuth('google', client)).resolves.toEqual({ status: 'unavailable' })
+  })
+
+  it('returns unavailable when the provider hand-off throws', async () => {
+    const client = authClient({
+      signInWithOAuth: vi.fn().mockRejectedValue(new Error('network down')),
+    })
+
+    await expect(signInWithOAuth('google', client)).resolves.toEqual({ status: 'unavailable' })
+  })
+
+  it('returns unavailable when auth is not configured in the browser', async () => {
+    await expect(signInWithOAuth('google', null)).resolves.toEqual({ status: 'unavailable' })
   })
 })
