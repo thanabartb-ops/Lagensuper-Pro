@@ -29,7 +29,7 @@ export type SignUpResult =
   | { status: 'invalid_signup' }
   | { status: 'unavailable' }
 
-export type OAuthProvider = 'google' | 'microsoft' | 'apple'
+export type OAuthProvider = 'google' | 'microsoft' | 'apple' | 'github'
 
 export type SignInOAuthResult =
   | { status: 'authenticated' }
@@ -198,6 +198,7 @@ const SUPABASE_PROVIDER_SLUG: Record<OAuthProvider, string> = {
   google: 'google',
   microsoft: 'azure',
   apple: 'apple',
+  github: 'github',
 }
 
 export async function signInWithOAuth(
