@@ -5,7 +5,6 @@ import {
   getCurrentSession,
   requestOTP,
   verifyOTP,
-  subscribeToAuthChanges,
   type OTPRequestResult,
   type OTPVerifyResult,
 } from '../components/v11/services/browserAuth'
@@ -104,7 +103,7 @@ describe('browser auth service - phone/OTP', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 400,
-      json: async () => ({ error: 'OTP has expired' }),
+      json: async () => ({ error: 'รหัส OTP หมดอายุแล้ว' }),
     })
 
     const result = await verifyOTP('0812345678', '123456', 'Test User', true)
@@ -123,16 +122,5 @@ describe('browser auth service - phone/OTP', () => {
     })
 
     await expect(clearBrowserSession()).resolves.toBeUndefined()
-  })
-
-  it('subscribes to auth changes and disposes subscription', () => {
-    let isSubscribed = true
-    const listener = vi.fn()
-
-    const dispose = subscribeToAuthChanges(listener)
-    expect(listener).toHaveBeenCalled()
-
-    dispose()
-    isSubscribed = false
   })
 })

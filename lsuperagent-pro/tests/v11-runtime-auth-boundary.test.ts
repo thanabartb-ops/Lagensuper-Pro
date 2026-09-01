@@ -25,8 +25,8 @@ afterEach(() => {
 })
 
 describe('chat runtime shared auth boundary', () => {
-  it('uses the shared browser-auth access token for /api/chat', async () => {
-    sessionMock.mockResolvedValue({ status: 'authenticated', accessToken: 'shared-user-token' })
+  it('uses session cookies for /api/chat authentication', async () => {
+    sessionMock.mockResolvedValue({ status: 'authenticated', phoneNumber: '0812345678', name: 'Test User' })
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -50,9 +50,7 @@ describe('chat runtime shared auth boundary', () => {
       '/api/chat',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({
-          authorization: 'Bearer shared-user-token',
-        }),
+        credentials: 'include',
       }),
     )
   })

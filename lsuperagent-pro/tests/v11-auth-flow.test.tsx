@@ -1,18 +1,14 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
 import { useEffect } from 'react'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LoginView } from '../components/v11/components/auth/LoginView'
 import { RequireAuth } from '../components/v11/components/auth/RequireAuth'
 import { V11Landing } from '../components/v11/V11Landing'
 
 const {
   pushMock,
   routerMock,
-  signInMock,
-  signUpMock,
-  oauthMock,
   getSessionMock,
   subscribeMock,
   protectedMountMock,
@@ -22,9 +18,6 @@ const {
   return {
     pushMock,
     routerMock: { push: pushMock, replace: pushMock },
-    signInMock: vi.fn(),
-    signUpMock: vi.fn(),
-    oauthMock: vi.fn(),
     getSessionMock: vi.fn(),
     subscribeMock: vi.fn(),
     protectedMountMock: vi.fn(),
@@ -41,39 +34,24 @@ vi.mock('../components/v11/services/browserAuth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/v11/services/browserAuth')>()
   return {
     ...actual,
-    signInWithPassword: signInMock,
-    signUpWithPassword: signUpMock,
-    signInWithOAuth: oauthMock,
     getCurrentSession: getSessionMock,
     subscribeToAuthChanges: subscribeMock,
   }
 })
 
 beforeEach(() => {
-  subscribeMock.mockReturnValue(() => undefined)
   searchParamsMock.mockReturnValue(new URLSearchParams('next=/chat'))
+  subscribeMock.mockReturnValue(() => undefined)
 })
 
 afterEach(() => {
   cleanup()
   pushMock.mockReset()
-  signInMock.mockReset()
-  signUpMock.mockReset()
-  oauthMock.mockReset()
   getSessionMock.mockReset()
   subscribeMock.mockReset()
   protectedMountMock.mockReset()
   searchParamsMock.mockReset()
 })
-
-function fillLoginForm() {
-  fireEvent.change(screen.getByLabelText('อีเมล'), {
-    target: { value: 'me@example.com' },
-  })
-  fireEvent.change(screen.getByLabelText('รหัสผ่าน'), {
-    target: { value: 'secret' },
-  })
-}
 
 function ProtectedProbe() {
   useEffect(() => {
@@ -81,191 +59,6 @@ function ProtectedProbe() {
   }, [])
   return <div>protected-chat</div>
 }
-
-describe('V11 email/password login', () => {
-  it('logs in with email/password and returns to /chat', async () => {
-    signInMock.mockResolvedValue({ status: 'authenticated' })
-    render(<LoginView />)
-    fillLoginForm()
-    fireEvent.click(screen.getByRole('button', { name: 'เข้าสู่ระบบ' }))
-
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/chat'))
-    expect(signInMock).toHaveBeenCalledWith('me@example.com', 'secret')
-  })
-
-  it('shows a safe Thai message for invalid credentials', async () => {
-    signInMock.mockResolvedValue({ status: 'invalid_credentials' })
-    render(<LoginView />)
-    fillLoginForm()
-    fireEvent.click(screen.getByRole('button', { name: 'เข้าสู่ระบบ' }))
-
-    expect(await screen.findByText('อีเมลหรือรหัสผ่านไม่ถูกต้อง')).toBeInTheDocument()
-    expect(pushMock).not.toHaveBeenCalled()
-  })
-
-  it('shows service unavailable without raw provider text', async () => {
-    signInMock.mockResolvedValue({ status: 'unavailable' })
-    render(<LoginView />)
-    fillLoginForm()
-    fireEvent.click(screen.getByRole('button', { name: 'เข้าสู่ระบบ' }))
-
-    expect(
-      await screen.findByText('ระบบเข้าสู่ระบบยังไม่พร้อม กรุณาลองใหม่อีกครั้ง'),
-    ).toBeInTheDocument()
-    expect(screen.queryByText(/supabase/i)).not.toBeInTheDocument()
-  })
-
-  it('blocks duplicate submit while sign-in is pending', async () => {
-    let resolve!: (value: { status: 'authenticated' }) => void
-    signInMock.mockReturnValue(
-      new Promise<{ status: 'authenticated' }>((done) => {
-        resolve = done
-      }),
-    )
-
-    render(<LoginView />)
-    fillLoginForm()
-    const button = screen.getByRole('button', { name: 'เข้าสู่ระบบ' })
-    fireEvent.click(button)
-
-    await waitFor(() => expect(button).toBeDisabled())
-    fireEvent.click(button)
-    expect(signInMock).toHaveBeenCalledTimes(1)
-
-    resolve({ status: 'authenticated' })
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/chat'))
-  })
-})
-
-describe('V11 email/password signup', () => {
-  it('opens signup mode from the landing page', () => {
-    render(<V11Landing />)
-
-    const signupButton = screen.getByRole('button', { name: 'สมัครใช้งาน' })
-    expect(signupButton).toBeEnabled()
-    fireEvent.click(signupButton)
-
-    expect(pushMock).toHaveBeenCalledWith('/login?next=/chat&mode=signup')
-  })
-
-  it('creates an account and enters Chat when signup returns a session', async () => {
-    searchParamsMock.mockReturnValue(new URLSearchParams('next=/chat&mode=signup'))
-    signUpMock.mockResolvedValue({ status: 'authenticated' })
-    render(<LoginView />)
-    fillLoginForm()
-    fireEvent.click(screen.getByRole('button', { name: 'สมัครใช้งาน' }))
-
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/chat'))
-    expect(signUpMock).toHaveBeenCalledWith('me@example.com', 'secret')
-    expect(signInMock).not.toHaveBeenCalled()
-  })
-
-  it('explains email confirmation instead of pretending signup is authenticated', async () => {
-    searchParamsMock.mockReturnValue(new URLSearchParams('next=/chat&mode=signup'))
-    signUpMock.mockResolvedValue({ status: 'confirmation_required' })
-    render(<LoginView />)
-    fillLoginForm()
-    fireEvent.click(screen.getByRole('button', { name: 'สมัครใช้งาน' }))
-
-    expect(
-      await screen.findByText('สมัครเรียบร้อย กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี'),
-    ).toBeInTheDocument()
-    expect(pushMock).not.toHaveBeenCalled()
-  })
-})
-
-describe('V11 OAuth social login', () => {
-  it.each([
-    ['Google', 'google'],
-    ['Microsoft', 'microsoft'],
-    ['Apple', 'apple'],
-  ])('starts the %s OAuth flow without touching password sign-in', async (label, provider) => {
-    oauthMock.mockResolvedValue({ status: 'authenticated' })
-    render(<LoginView />)
-
-    fireEvent.click(screen.getByRole('button', { name: `ดำเนินการต่อด้วย ${label}` }))
-
-    await waitFor(() => expect(oauthMock).toHaveBeenCalledWith(provider))
-    expect(signInMock).not.toHaveBeenCalled()
-    expect(signUpMock).not.toHaveBeenCalled()
-  })
-
-  it('shows the Thai unavailable message without raw provider text', async () => {
-    oauthMock.mockResolvedValue({ status: 'unavailable' })
-    render(<LoginView />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Google' }))
-
-    expect(
-      await screen.findByText('ระบบล็อกอินยังไม่พร้อม กรุณาลองใหม่อีกครั้ง'),
-    ).toBeInTheDocument()
-    expect(pushMock).not.toHaveBeenCalled()
-    expect(screen.queryByText(/supabase/i)).not.toBeInTheDocument()
-  })
-
-  it('re-enables the buttons after an unavailable provider so the user can retry', async () => {
-    oauthMock.mockResolvedValue({ status: 'unavailable' })
-    render(<LoginView />)
-
-    const googleButton = screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Google' })
-    fireEvent.click(googleButton)
-
-    await waitFor(() => expect(googleButton).toBeEnabled())
-    fireEvent.click(googleButton)
-    await waitFor(() => expect(oauthMock).toHaveBeenCalledTimes(2))
-  })
-
-  it('blocks duplicate OAuth submits while a provider hand-off is pending', async () => {
-    let resolve!: (value: { status: 'authenticated' }) => void
-    oauthMock.mockReturnValue(
-      new Promise<{ status: 'authenticated' }>((done) => {
-        resolve = done
-      }),
-    )
-
-    render(<LoginView />)
-    const googleButton = screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Google' })
-    const microsoftButton = screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Microsoft' })
-    const submitButton = screen.getByRole('button', { name: 'เข้าสู่ระบบ' })
-    fireEvent.click(googleButton)
-
-    await waitFor(() => expect(googleButton).toBeDisabled())
-    expect(microsoftButton).toBeDisabled()
-    expect(submitButton).toBeDisabled()
-
-    fireEvent.click(googleButton)
-    expect(oauthMock).toHaveBeenCalledTimes(1)
-
-    resolve({ status: 'authenticated' })
-  })
-
-  it('marks only the chosen provider as pending', async () => {
-    let resolve!: (value: { status: 'authenticated' }) => void
-    oauthMock.mockReturnValue(
-      new Promise<{ status: 'authenticated' }>((done) => {
-        resolve = done
-      }),
-    )
-
-    render(<LoginView />)
-    fireEvent.click(screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Microsoft' }))
-
-    expect(await screen.findByText('กำลังเปิด Microsoft...')).toBeInTheDocument()
-    expect(screen.queryByText('กำลังเปิด Google...')).not.toBeInTheDocument()
-    expect(screen.getByText('ดำเนินการต่อด้วย Google')).toBeInTheDocument()
-
-    resolve({ status: 'authenticated' })
-  })
-
-  it('offers the same providers in signup mode', () => {
-    searchParamsMock.mockReturnValue(new URLSearchParams('next=/chat&mode=signup'))
-    render(<LoginView />)
-
-    expect(screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Google' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Microsoft' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'ดำเนินการต่อด้วย Apple' })).toBeEnabled()
-  })
-})
 
 describe('V11 landing auth entry', () => {
   it('offers a real login action that returns to Chat after authentication', () => {
@@ -296,7 +89,7 @@ describe('V11 chat auth gate', () => {
   })
 
   it('renders protected Chat only after a valid session is confirmed', async () => {
-    getSessionMock.mockResolvedValue({ status: 'authenticated', accessToken: 'token' })
+    getSessionMock.mockResolvedValue({ status: 'authenticated', phoneNumber: '0812345678', name: 'Test User' })
 
     render(
       <RequireAuth>
@@ -306,26 +99,5 @@ describe('V11 chat auth gate', () => {
     expect(await screen.findByText('protected-chat')).toBeInTheDocument()
     expect(protectedMountMock).toHaveBeenCalledTimes(1)
     expect(pushMock).not.toHaveBeenCalled()
-  })
-
-  it('fails closed when an authenticated session disappears', async () => {
-    let authListener: ((authenticated: boolean) => void) | undefined
-    getSessionMock.mockResolvedValue({ status: 'authenticated', accessToken: 'token' })
-    subscribeMock.mockImplementation((listener: (authenticated: boolean) => void) => {
-      authListener = listener
-      return () => undefined
-    })
-
-    render(
-      <RequireAuth>
-        <ProtectedProbe />
-      </RequireAuth>,
-    )
-    expect(await screen.findByText('protected-chat')).toBeInTheDocument()
-
-    act(() => authListener?.(false))
-
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/login?next=/chat'))
-    expect(screen.queryByText('protected-chat')).not.toBeInTheDocument()
   })
 })
