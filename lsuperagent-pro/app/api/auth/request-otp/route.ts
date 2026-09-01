@@ -25,11 +25,8 @@ function isValidPhoneNumber(phone: string): boolean {
 }
 
 async function sendSMS(phoneNumber: string, code: string): Promise<boolean> {
-  // Mock SMS service - in production replace with Twilio, AWS SNS, etc.
-  console.log(`[OTP Service] Sending OTP ${code} to ${phoneNumber}`)
-
-  // For development/testing, store OTP in response for demo purposes
-  // In production, this would be sent via actual SMS service
+  // Mock SMS service - console log only
+  console.log(`\n${'='.repeat(60)}\n[OTP] Code: ${code}\n[Phone] ${phoneNumber}\n${'='.repeat(60)}\n`)
   return true
 }
 

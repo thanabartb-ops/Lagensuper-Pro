@@ -149,6 +149,7 @@ export function PhoneOTPForm({
             />
           </div>
             <p className="mt-2 text-xs text-white/50">ป้อนรหัส 6 หลักที่ส่งไปยังเบอร์โทรศัพท์ของคุณ</p>
+          <p className="mt-1 text-xs text-amber-400/70">(Development: ดู browser console หรือ server logs สำหรับ OTP code)</p>
         </div>
 
         <button
