@@ -131,7 +131,7 @@ export function PhoneOTPForm({
       <form onSubmit={handleVerifyOTP} className="space-y-4">
         <div>
           <label htmlFor="otp" className="mb-1.5 block text-sm font-medium text-white/80">
-            รหัส OTP
+            รหัส OTP (ตรวจสอบ SMS)
           </label>
           <div className="flex min-h-[48px] items-center rounded-2xl border border-[#312E81] bg-[#131525] px-3 focus-within:border-[#7B2CFE] focus-within:ring-2 focus-within:ring-[#7B2CFE]/20">
             <Lock className="h-4 w-4 shrink-0 text-white/35" aria-hidden="true" />
@@ -148,13 +148,8 @@ export function PhoneOTPForm({
               required
             />
           </div>
+            <p className="mt-2 text-xs text-white/50">ป้อนรหัส 6 หลักที่ส่งไปยังเบอร์โทรศัพท์ของคุณ</p>
         </div>
-
-        {demoOtp && (
-          <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-            <span className="font-medium">Demo OTP:</span> {demoOtp}
-          </p>
-        )}
 
         <button
           type="submit"
