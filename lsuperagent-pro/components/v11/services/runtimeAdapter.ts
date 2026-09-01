@@ -34,8 +34,8 @@ async function sendAuthenticatedChat(message: string): Promise<ChatSenderResult>
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${session.accessToken}`,
       },
+      credentials: 'include',
       body: JSON.stringify({ message }),
     });
 

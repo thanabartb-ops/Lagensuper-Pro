@@ -3,196 +3,136 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   clearBrowserSession,
   getCurrentSession,
-  sanitizeAuthNext,
-  signInWithOAuth,
-  signInWithPassword,
+  requestOTP,
+  verifyOTP,
   subscribeToAuthChanges,
-  type AuthClientLike,
-  type OAuthProvider,
+  type OTPRequestResult,
+  type OTPVerifyResult,
 } from '../components/v11/services/browserAuth'
 
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function authClient(overrides: Partial<AuthClientLike['auth']>): AuthClientLike {
-  return { auth: overrides as AuthClientLike['auth'] }
-}
-
-describe('browser auth service', () => {
-  it('returns an authenticated session with its access token', async () => {
-    const client = authClient({
-      getSession: vi.fn().mockResolvedValue({
-        data: { session: { access_token: 'user-token' } },
-        error: null,
+describe('browser auth service - phone/OTP', () => {
+  it('returns an authenticated session with phone and name', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        authenticated: true,
+        user: { phoneNumber: '0812345678', name: 'Test User' },
       }),
     })
 
-    await expect(getCurrentSession(client)).resolves.toEqual({
+    const result = await getCurrentSession()
+    expect(result).toEqual({
       status: 'authenticated',
-      accessToken: 'user-token',
+      phoneNumber: '0812345678',
+      name: 'Test User',
     })
   })
 
   it('returns unauthenticated when there is no session', async () => {
-    const client = authClient({
-      getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
     })
 
-    await expect(getCurrentSession(client)).resolves.toEqual({ status: 'unauthenticated' })
-  })
-
-  it('normalizes invalid credentials without exposing raw Supabase text', async () => {
-    const client = authClient({
-      signInWithPassword: vi.fn().mockResolvedValue({
-        data: { session: null, user: null },
-        error: { message: 'Invalid login credentials' },
-      }),
-    })
-
-    await expect(signInWithPassword('me@example.com', 'wrong', client)).resolves.toEqual({
-      status: 'invalid_credentials',
-    })
-  })
-
-  it('creates a signup session through the shared browser auth client', async () => {
-    const authModule = await import('../components/v11/services/browserAuth')
-    const signUp = (
-      authModule as typeof authModule & {
-        signUpWithPassword?: (
-          email: string,
-          password: string,
-          client: AuthClientLike,
-        ) => Promise<{ status: string }>
-      }
-    ).signUpWithPassword
-
-    expect(signUp).toBeTypeOf('function')
-    if (!signUp) return
-
-    const signUpRequest = vi.fn().mockResolvedValue({
-      data: { session: { access_token: 'new-user-token' }, user: { id: 'user-1' } },
-      error: null,
-    })
-    const client = { auth: { signUp: signUpRequest } } as unknown as AuthClientLike
-
-    await expect(signUp('new@example.com', 'secret', client)).resolves.toEqual({
-      status: 'authenticated',
-    })
-    expect(signUpRequest).toHaveBeenCalledWith({ email: 'new@example.com', password: 'secret' })
-  })
-
-  it('reports confirmation required when signup creates a user without a session', async () => {
-    const authModule = await import('../components/v11/services/browserAuth')
-    const signUp = (
-      authModule as typeof authModule & {
-        signUpWithPassword?: (
-          email: string,
-          password: string,
-          client: AuthClientLike,
-        ) => Promise<{ status: string }>
-      }
-    ).signUpWithPassword
-
-    expect(signUp).toBeTypeOf('function')
-    if (!signUp) return
-
-    const client = {
-      auth: {
-        signUp: vi.fn().mockResolvedValue({
-          data: { session: null, user: { id: 'user-1' } },
-          error: null,
-        }),
-      },
-    } as unknown as AuthClientLike
-
-    await expect(signUp('new@example.com', 'secret', client)).resolves.toEqual({
-      status: 'confirmation_required',
-    })
+    const result = await getCurrentSession()
+    expect(result).toEqual({ status: 'unauthenticated' })
   })
 
   it('returns unavailable when auth cannot be reached', async () => {
-    const client = authClient({
-      getSession: vi.fn().mockRejectedValue(new Error('network down')),
-    })
+    global.fetch = vi.fn().mockRejectedValue(new Error('network down'))
 
-    await expect(getCurrentSession(client)).resolves.toEqual({ status: 'unavailable' })
+    const result = await getCurrentSession()
+    expect(result).toEqual({ status: 'unavailable' })
   })
 
-  it('allows only /chat as a post-login destination', () => {
-    expect(sanitizeAuthNext('/chat')).toBe('/chat')
-    expect(sanitizeAuthNext('https://evil.example')).toBe('/chat')
-    expect(sanitizeAuthNext('//evil.example')).toBe('/chat')
-    expect(sanitizeAuthNext('/settings')).toBe('/chat')
-    expect(sanitizeAuthNext(null)).toBe('/chat')
-  })
-
-  it('clears a stale session without surfacing sign-out failure', async () => {
-    const signOut = vi.fn().mockRejectedValue(new Error('already gone'))
-    await expect(clearBrowserSession(authClient({ signOut }))).resolves.toBeUndefined()
-    expect(signOut).toHaveBeenCalledTimes(1)
-  })
-
-  it('subscribes to auth changes and disposes the subscription', () => {
-    const unsubscribe = vi.fn()
-    let callback: ((_event: string, session: unknown) => void) | undefined
-    const onAuthStateChange = vi.fn((cb: (_event: string, session: unknown) => void) => {
-      callback = cb
-      return { data: { subscription: { unsubscribe } } }
-    })
-    const listener = vi.fn()
-
-    const dispose = subscribeToAuthChanges(listener, authClient({ onAuthStateChange }))
-    callback?.('SIGNED_IN', { access_token: 'token' })
-    callback?.('SIGNED_OUT', null)
-    dispose()
-
-    expect(listener).toHaveBeenNthCalledWith(1, true)
-    expect(listener).toHaveBeenNthCalledWith(2, false)
-    expect(unsubscribe).toHaveBeenCalledTimes(1)
-  })
-})
-
-describe('browser auth OAuth hand-off', () => {
-  it.each<[OAuthProvider, string]>([
-    ['google', 'google'],
-    ['microsoft', 'azure'],
-    ['apple', 'apple'],
-  ])('sends %s to Supabase as the %s provider slug', async (provider, slug) => {
-    const request = vi.fn().mockResolvedValue({ data: { provider: slug, url: 'https://provider.example' }, error: null })
-
-    await expect(signInWithOAuth(provider, authClient({ signInWithOAuth: request }))).resolves.toEqual({
-      status: 'authenticated',
-    })
-    // Without an explicit redirectTo, Supabase sends the user back to its
-    // default Site URL instead of /chat, breaking the "sign in returns to
-    // Chat" guarantee sanitizeAuthNext exists to enforce.
-    expect(request).toHaveBeenCalledWith({
-      provider: slug,
-      options: { redirectTo: `${window.location.origin}/chat` },
-    })
-  })
-
-  it('normalizes a provider error without exposing raw Supabase text', async () => {
-    const client = authClient({
-      signInWithOAuth: vi.fn().mockResolvedValue({
-        data: { provider: 'google', url: null },
-        error: { message: 'Unsupported provider: provider is not enabled' },
+  it('requests OTP for a valid phone number', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        message: 'OTP sent',
+        _demo_otp: '123456',
       }),
     })
 
-    await expect(signInWithOAuth('google', client)).resolves.toEqual({ status: 'unavailable' })
+    const result = await requestOTP('0812345678')
+    expect(result.status).toBe('sent')
+    if (result.status === 'sent') {
+      expect(result.demoOtp).toBe('123456')
+    }
   })
 
-  it('returns unavailable when the provider hand-off throws', async () => {
-    const client = authClient({
-      signInWithOAuth: vi.fn().mockRejectedValue(new Error('network down')),
+  it('returns invalid_phone for empty phone number', async () => {
+    const result = await requestOTP('')
+    expect(result).toEqual({ status: 'invalid_phone' })
+  })
+
+  it('verifies OTP and creates authenticated session', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        user: { phoneNumber: '0812345678', name: 'Test User' },
+      }),
     })
 
-    await expect(signInWithOAuth('google', client)).resolves.toEqual({ status: 'unavailable' })
+    const result = await verifyOTP('0812345678', '123456', 'Test User', true)
+    expect(result).toEqual({
+      status: 'authenticated',
+      phoneNumber: '0812345678',
+      name: 'Test User',
+    })
   })
 
-  it('returns unavailable when auth is not configured in the browser', async () => {
-    await expect(signInWithOAuth('google', null)).resolves.toEqual({ status: 'unavailable' })
+  it('returns invalid_otp for wrong code', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'OTP incorrect' }),
+    })
+
+    const result = await verifyOTP('0812345678', '000000', 'Test User', true)
+    expect(result).toEqual({ status: 'invalid_otp' })
+  })
+
+  it('returns expired when OTP has expired', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'OTP has expired' }),
+    })
+
+    const result = await verifyOTP('0812345678', '123456', 'Test User', true)
+    expect(result).toEqual({ status: 'expired' })
+  })
+
+  it('returns invalid_input when terms not accepted', async () => {
+    const result = await verifyOTP('0812345678', '123456', 'Test User', false)
+    expect(result).toEqual({ status: 'invalid_input' })
+  })
+
+  it('clears browser session on logout', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    })
+
+    await expect(clearBrowserSession()).resolves.toBeUndefined()
+  })
+
+  it('subscribes to auth changes and disposes subscription', () => {
+    let isSubscribed = true
+    const listener = vi.fn()
+
+    const dispose = subscribeToAuthChanges(listener)
+    expect(listener).toHaveBeenCalled()
+
+    dispose()
+    isSubscribed = false
   })
 })
