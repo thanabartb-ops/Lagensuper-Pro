@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { AppRoute } from '../../types';
 import {
   Search,
-  Sparkles,
+  Send,
   MessageSquare,
   Compass,
   Image as ImageIcon,
@@ -112,27 +112,28 @@ export const DashboardSection: React.FC<DashboardSectionProps> = ({
             </p>
           </div>
 
-          {/* Search / Composer Input Bar with Elegant Dark Glow */}
+          {/* Primary chat composer */}
           <form onSubmit={handleSearchSubmit} className="relative mb-8 group">
             <div className="absolute -inset-[1px] bg-gradient-to-r from-[#FF00FF] via-[#7B2CFE] to-[#00D1FF] rounded-2xl opacity-25 group-focus-within:opacity-100 transition-opacity blur-[2px] pointer-events-none" />
-            <div className="relative bg-[#131525] rounded-2xl border border-[#312E81] flex items-center p-2">
-              <div className="pl-3 text-white/40 pointer-events-none">
+            <div className="relative bg-[#131525] rounded-2xl border border-[#312E81] flex min-w-0 items-center p-2">
+              <div className="pl-2 sm:pl-3 text-white/40 pointer-events-none shrink-0">
                 <Search className="w-5 h-5" />
               </div>
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="พิมพ์ข้อความ หรือเลือกเครื่องมือด้านล่าง..."
-                className="flex-1 bg-transparent border-none outline-none px-4 py-3 text-sm sm:text-base text-white placeholder:text-white/30"
+                placeholder="พิมพ์ข้อความ..."
+                className="min-w-0 flex-1 bg-transparent border-none outline-none px-3 sm:px-4 py-3 text-sm sm:text-base text-white placeholder:text-white/30"
               />
               <button
                 type="submit"
-                className="bg-gradient-to-r from-[#FF00FF] to-[#7B2CFE] hover:opacity-90 px-6 py-3 rounded-xl font-bold text-white transition-all cursor-pointer flex items-center gap-2 text-sm shrink-0 min-h-[44px]"
-                title="ค้นหาหรือเริ่มงาน"
+                aria-label="ส่งข้อความ"
+                title="ส่งข้อความ"
+                disabled={!searchQuery.trim()}
+                className="w-11 h-11 min-w-[44px] shrink-0 rounded-xl bg-gradient-to-r from-[#FF00FF] to-[#7B2CFE] text-white flex items-center justify-center transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <span>เริ่มต้นใช้งาน</span>
-                <Sparkles className="w-4 h-4" />
+                <Send className="w-4 h-4" />
               </button>
             </div>
 

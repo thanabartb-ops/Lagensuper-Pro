@@ -60,7 +60,6 @@ jobs:
           set -euo pipefail
           test -f app/api/health/route.ts
           prohibited=(
-            app/api/chat/route.ts
             app/api/execute/route.ts
             app/api/memory/route.ts
             app/api/memory/candidate/route.ts

@@ -1,5 +1,10 @@
+import { RequireAuth } from '@/components/v11/components/auth/RequireAuth'
 import { V11RouteView } from '@/components/v11/V11RouteView'
 
 export default function ChatPage() {
-  return <V11RouteView route="smart_chat" />
+  return (
+    <RequireAuth>
+      <V11RouteView route="smart_chat" />
+    </RequireAuth>
+  )
 }

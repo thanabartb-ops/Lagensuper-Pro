@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatMessage, StreamingStatus } from '../../types';
-import { StatusBadge } from '../common/StatusBadge';
+import { clearBrowserSession } from '../../services/browserAuth';
 import { defaultRuntimeAdapter } from '../../services/runtimeAdapter';
-import { clearPendingPrompt, peekPendingPrompt } from '../../services/promptHandoff';
+import { clearPendingPrompt, peekPendingPrompt, setPendingPrompt } from '../../services/promptHandoff';
 import {
   Send,
   Sparkles,
@@ -15,22 +16,20 @@ import {
   Square,
   Copy,
   Check,
-  AlertCircle,
   Paperclip,
   Mic,
-  Trash2,
 } from 'lucide-react';
 
 export const SmartChatView: React.FC = () => {
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-1',
       sender: 'assistant',
-      content:
-        'สวัสดีครับ! ผมคือ **LS_BOTAGENT** ผู้ช่วยอัจฉริยะประจำ LSUPERAGENT V11 ยินดีช่วยเหลือคุณในการคิด วางแผน เขียนคอนเทนต์ และวิเคราะห์ข้อมูล\n\n*(หมายเหตุ: ระบบทำงานในโหมดจำลอง DEMO เนื่องจาก Gateway เป็นสถานะ NOT_CONNECTED)*',
+      content: 'สวัสดีครับ ผมคือ **LS_BOTAGENT** วันนี้ให้ผมช่วยอะไรครับ?',
       timestamp: '10:00',
       status: 'completed',
-      isDemo: true,
+      isDemo: false,
     },
   ]);
 
@@ -97,8 +96,6 @@ export const SmartChatView: React.FC = () => {
       const text = (textToSend ?? inputValue).trim();
       if (!text || streamingStatus === 'running' || streamingStatus === 'queued') return;
 
-      // A completed/cancelled response may still own a delayed transition back
-      // to idle. Cancel it before the new request can become running.
       clearStatusReset();
 
       const userMsg: ChatMessage = {
@@ -134,10 +131,19 @@ export const SmartChatView: React.FC = () => {
         const result = await defaultRuntimeAdapter.executePrompt(text, 'smart_chat');
         if (controller.signal.aborted) return;
 
-        const fullResponse = result.message;
-        const isDemo = result.status !== 'SUCCESS';
+        if (result.status === 'UNAUTHENTICATED') {
+          abortRef.current = null;
+          setPendingPrompt(text);
+          setMessages((prev) => prev.filter((message) => message.id !== botMsgId));
+          setStreamingStatus('idle');
+          await clearBrowserSession();
+          router.replace('/login?next=/chat');
+          return;
+        }
 
+        const fullResponse = result.message;
         let currentLength = 0;
+
         intervalRef.current = setInterval(() => {
           if (controller.signal.aborted) {
             if (intervalRef.current !== null) clearInterval(intervalRef.current);
@@ -153,7 +159,9 @@ export const SmartChatView: React.FC = () => {
             abortRef.current = null;
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === botMsgId ? { ...m, content: fullResponse, status: 'completed', isDemo } : m
+                m.id === botMsgId
+                  ? { ...m, content: fullResponse, status: 'completed', isDemo: false }
+                  : m
               )
             );
             setStreamingStatus('completed');
@@ -162,7 +170,9 @@ export const SmartChatView: React.FC = () => {
             const slice = fullResponse.slice(0, currentLength);
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === botMsgId ? { ...m, content: slice, status: 'partial', isDemo } : m
+                m.id === botMsgId
+                  ? { ...m, content: slice, status: 'partial', isDemo: false }
+                  : m
               )
             );
           }
@@ -173,7 +183,7 @@ export const SmartChatView: React.FC = () => {
         scheduleStatusReset(800);
       }
     },
-    [inputValue, streamingStatus, clearStatusReset, scheduleStatusReset]
+    [inputValue, streamingStatus, clearStatusReset, scheduleStatusReset, router]
   );
 
   const handleStopStreaming = useCallback(() => {
@@ -185,9 +195,6 @@ export const SmartChatView: React.FC = () => {
     scheduleStatusReset(600);
   }, [teardown, scheduleStatusReset]);
 
-  // Peek first and consume only inside the timer that actually starts delivery.
-  // React Strict Mode may cancel the first setup timer during effect replay; in
-  // that case sessionStorage still contains the prompt for the surviving setup.
   useEffect(() => {
     const pending = peekPendingPrompt();
     if (!pending) return;
@@ -209,21 +216,6 @@ export const SmartChatView: React.FC = () => {
     }
   };
 
-  const handleClearChat = () => {
-    teardown();
-    setStreamingStatus('idle');
-    setMessages([
-      {
-        id: 'msg-init',
-        sender: 'assistant',
-        content: 'เริ่มต้นบทสนทนาใหม่แล้วครับ คุณต้องการให้ LSUPERAGENT ช่วยอะไรในวันนี้?',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'completed',
-        isDemo: true,
-      },
-    ]);
-  };
-
   const suggestions = [
     'สรุปเนื้อหาบทความนี้ให้หน่อย',
     'ร่างโครงสร้างโครงการ AI สำหรับทีมงาน',
@@ -235,45 +227,13 @@ export const SmartChatView: React.FC = () => {
 
   return (
     <div className="mx-auto flex h-full max-w-[1120px] flex-col px-2 pb-16 sm:px-6 md:pb-6">
-      {/* Surface Header */}
-      <div className="py-3 px-4 mb-2 bg-[#131525] border border-[#312E81] rounded-2xl flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF00FF] to-[#7B2CFE] flex items-center justify-center text-white shadow-md shadow-[#7B2CFE]/30">
-            <Bot className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm sm:text-base font-bold text-white">LS_BOTAGENT (Smart Chat)</h2>
-              <StatusBadge type="demo" text="DEMO" size="sm" />
-            </div>
-            <p className="text-[11px] text-white/50">โหมดถาม-ตอบอัจฉริยะภาษาไทย · V11 Public Beta</p>
-          </div>
+      <div className="mb-2 flex items-center gap-3 border-b border-[#312E81]/70 px-2 py-3 sm:px-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#FF00FF] to-[#7B2CFE] text-white shadow-md shadow-[#7B2CFE]/20">
+          <Bot className="h-4 w-4" />
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleClearChat}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0C0D1A] border border-[#312E81] hover:border-[#7B2CFE] text-xs text-white/50 hover:text-white transition-colors min-h-[36px]"
-            title="ล้างบทสนทนา"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">ล้างแชท</span>
-          </button>
-        </div>
+        <h2 className="text-base font-bold text-white">LS_BOTAGENT</h2>
       </div>
 
-      {/* Honest Warning Banner */}
-      <div className="mb-2 px-3.5 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-300 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-          <span>
-            สถานะ Gateway: <strong>NOT_CONNECTED</strong> (Mock Adapter ทำงาน)
-          </span>
-        </div>
-        <StatusBadge type="not_connected" text="OFFLINE" size="sm" />
-      </div>
-
-      {/* Messages Thread */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 rounded-2xl bg-[#0C0D1A] border border-[#312E81]">
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
@@ -315,12 +275,12 @@ export const SmartChatView: React.FC = () => {
                     {msg.status === 'cancelled' && (
                       <span className="text-[10px] text-red-400 font-mono">STOPPED</span>
                     )}
-                    {msg.isDemo && <span className="text-[10px] text-yellow-500 font-mono">DEMO</span>}
                     {!isUser && (
                       <button
                         onClick={() => void handleCopy(msg.id, msg.content)}
                         className="hover:text-white transition-colors p-1"
                         title="คัดลอกข้อความ"
+                        aria-label="คัดลอกข้อความ"
                       >
                         {copiedId === msg.id ? (
                           <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -360,12 +320,11 @@ export const SmartChatView: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggestion Chips */}
       {messages.length <= 2 && (
         <div className="flex items-center gap-2 py-2 overflow-x-auto scrollbar-none">
-          {suggestions.map((sug, i) => (
+          {suggestions.map((sug) => (
             <button
-              key={i}
+              key={sug}
               onClick={() => void handleSendMessage(sug)}
               className="whitespace-nowrap px-3.5 py-1.5 rounded-full bg-[#131525] border border-[#312E81] hover:border-[#7B2CFE] text-xs text-white/50 hover:text-white transition-all cursor-pointer min-h-[36px]"
             >
@@ -375,19 +334,21 @@ export const SmartChatView: React.FC = () => {
         </div>
       )}
 
-      {/* Composer */}
       <div className="relative pt-2">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             void handleSendMessage();
           }}
-          className="relative flex items-center gap-2 bg-[#131525] border border-[#312E81] focus-within:border-[#7B2CFE] rounded-2xl p-2 transition-all shadow-lg"
+          className="relative flex min-w-0 items-center gap-2 bg-[#131525] border border-[#312E81] focus-within:border-[#7B2CFE] rounded-2xl p-2 transition-all shadow-lg"
         >
           <button
             type="button"
-            className="w-10 h-10 rounded-xl text-white/40 hover:text-white hover:bg-[#1A1C30] flex items-center justify-center transition-colors min-h-[44px] min-w-[44px]"
-            title="แนบไฟล์ (จำลอง)"
+            disabled
+            aria-disabled="true"
+            className="w-10 h-10 rounded-xl text-white/25 flex items-center justify-center min-h-[44px] min-w-[44px] cursor-not-allowed"
+            title="แนบไฟล์ — ยังไม่เปิดใช้"
+            aria-label="แนบไฟล์ — ยังไม่เปิดใช้"
           >
             <Paperclip className="w-4 h-4" />
           </button>
@@ -396,14 +357,17 @@ export const SmartChatView: React.FC = () => {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="พิมพ์คำถามของคุณ..."
+            placeholder="พิมพ์ข้อความ..."
             className="flex-1 min-w-0 bg-transparent text-sm sm:text-base text-white placeholder:text-white/30 outline-none px-2"
           />
 
           <button
             type="button"
-            className="w-10 h-10 rounded-xl text-white/40 hover:text-white hover:bg-[#1A1C30] flex items-center justify-center transition-colors min-h-[44px] min-w-[44px]"
-            title="พิมพ์ด้วยเสียง (จำลอง)"
+            disabled
+            aria-disabled="true"
+            className="w-10 h-10 rounded-xl text-white/25 flex items-center justify-center min-h-[44px] min-w-[44px] cursor-not-allowed"
+            title="เสียง — ยังไม่เปิดใช้"
+            aria-label="เสียง — ยังไม่เปิดใช้"
           >
             <Mic className="w-4 h-4" />
           </button>
@@ -414,6 +378,7 @@ export const SmartChatView: React.FC = () => {
               onClick={handleStopStreaming}
               className="w-11 h-11 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-all cursor-pointer min-h-[44px] min-w-[44px]"
               title="หยุดการทำงาน"
+              aria-label="หยุดการทำงาน"
             >
               <Square className="w-4 h-4" />
             </button>
@@ -423,6 +388,7 @@ export const SmartChatView: React.FC = () => {
               disabled={!inputValue.trim()}
               className="w-11 h-11 rounded-xl bg-gradient-to-r from-[#FF00FF] to-[#7B2CFE] hover:opacity-90 text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer min-h-[44px] min-w-[44px] shadow-[0_2px_12px_rgba(123,44,254,0.4)]"
               title="ส่งข้อความ"
+              aria-label="ส่งข้อความ"
             >
               <Send className="w-4 h-4" />
             </button>
